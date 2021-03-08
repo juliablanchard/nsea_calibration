@@ -4,8 +4,8 @@ author: Julia L. Blanchard
 date: July 2020
 place: Hobart, Australia
 output:
-  pdf_document: default
   html_document: default
+  pdf_document: default
 ---
 
 # Introduction 
@@ -19,7 +19,7 @@ Presumably these get the model in the correct ball-park for each species time-av
 Aims of this practical example: 
 1) Learn the main steps involved in forcing a size spectrum model
 2) Visually compare some of the model predictions with time-series data 
-3) Explore how post-hoc parameter changes can affect model skill through time
+3) Fitting the model to time-series data
 
 
 We previously forced with fishing mortality time series using the North Sea model and there are examples for this in the mizer vignette. This model compared predictions to observations, but we did not capture directional environmental change (only noise in the realised recruitment). One potential issue with the deterministic version of the  model is related to the stock recruitment dynamics we assumed. First, we assumed an eRepro of 1 (which essentially ignores any losses of eggs, and assumes all eggs enter the size spectrum are available to be eaten and potentially grow). The second assumption was related to our values of Rmax. We calibrated the model to catches and biomass and estimated Rmax values (least known parameter). 

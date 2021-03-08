@@ -54,7 +54,7 @@ getErrorTime <- function(vary,params,dat,env=state,tol = 0.1) {
   
 }
 
-vary<-c(log10(simt@params@species_params$R_max),simt@params@species_params$erepro,log10(5e11),4)
+#vary<-c(log10(simt@params@species_params$R_max),simt@params@species_params$erepro,log10(5e11),4)
 
 # ## test it
 # err<-getErrorTime(vary = vary, params = params, dat = obsy)
