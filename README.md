@@ -1,2 +1,2 @@
-# HowToMizer
-Code for practical examples to accompany "How To Mizer" paper
+# North Sea Mizer Model Calibration
+Code for time-averaged and time-series fitting to ICES Catch data.
