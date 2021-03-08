@@ -3,10 +3,11 @@
 Fmat<-read.csv("data/fmatWeighted.csv")
 Catchmat<-read.csv("data/catchesMat.csv")
 
+library(mizer)
 
 # read in baseline simulations
 
-optim_sim <- readRDS("optim_sim.RDS")
+optim_sim <- readRDS("sim_opt_time_series.RDS")
 # set the param object 
 params_optim<-optim_sim@params
 # run model from the equiibrium to check it's OK
@@ -24,7 +25,7 @@ effort_multiplier<-seq(0,10,0.1)
 eqyield<-matrix(data=NA,nrow=length(effort_multiplier), ncol=12)
 
 for (i in 1:length(effort_multiplier)){
-sim_yield <- project(params_optim, effort = effort_multiplier[i], t_max = 100, dt=0.1,initial_n = sim_guessed@n[100,,],initial_n_pp = sim_guessed@n_pp[100,])
+sim_yield <- project(params_optim, effort = effort_multiplier[i], t_max = 100, dt=0.1,initial_n = sim_optim@n[100,,],initial_n_pp = sim_optim@n_pp[100,])
 eqyield[i,]<-getYield(sim_yield)[100,]
 }
 
