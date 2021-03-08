@@ -1,0 +1,481 @@
+---
+title: "Example #2: Modelling Changes Through Time"
+author: Julia L. Blanchard
+date: July 2020
+place: Hobart, Australia
+output:
+  pdf_document: default
+  html_document: default
+---
+
+# Introduction 
+
+There are many emerging size spectrum modelling (including mizer) applications that aim to examine changes in time series through time. Depending on your question and the goals you have in mind for your model, it may even be worth fitting models to time series data. We may wish to discuss this later. A first step in exploration of ecosystem models with time series however, often starts by simply varying input or "forcing" parameters through time. 
+
+Here, we begin with the steady state or equilibrium model that has already been calibrated and evaluated. 
+
+Presumably these get the model in the correct ball-park for each species time-average biomass, abundance, catches, growth etc. We then examine how different variables can "force"" the model away from the equilibrium state. Often a goal is being asked whether the forcing alone is enough to capture the trends in time series - e.g. fishing mortality, phytoplankton abundance, temperature  include examples that have been published.
+
+Aims of this practical example: 
+1) Learn the main steps involved in forcing a size spectrum model
+2) Visually compare some of the model predictions with time-series data 
+3) Explore how post-hoc parameter changes can affect model skill through time
+
+
+We previously forced with fishing mortality time series using the North Sea model and there are examples for this in the mizer vignette. This model compared predictions to observations, but we did not capture directional environmental change (only noise in the realised recruitment). One potential issue with the deterministic version of the  model is related to the stock recruitment dynamics we assumed. First, we assumed an eRepro of 1 (which essentially ignores any losses of eggs, and assumes all eggs enter the size spectrum are available to be eaten and potentially grow). The second assumption was related to our values of Rmax. We calibrated the model to catches and biomass and estimated Rmax values (least known parameter). 
+
+PART A. Here we will explore the calibrated model and apply the dynamical forcing.
+
+Preliminary set up again... if needed.
+```{r}
+#get required packages
+library(mizer)
+library(tidyverse)
+library("parallel")
+library("optimParallel")
+library("tictoc")
+
+```
+
+Let's read in the saved calibrated parameters of the North sea model stored in the mizer package. These examples do not use the exact same parameters as in the published papers, so are for illustrative purposes here.
+
+```{r,warnings=F}
+#read saved sim object from previous example
+sim <- readRDS("optim_para_sim.RDS")
+params<-sim@params
+
+# run model to equilibrium and plot results, with fishing.
+# here an effort = 1 will equate to a fihsing mortality rate = 1 and uses the default knife-edge selectivity function
+sim <- project(params, effort = 1, t_max = 200, dt=0.1,initial_n = sim@n[dim(sim@n)[1],,], initial_npp = sim@n[dim(sim@n)[1],])
+
+plot(sim)
+plotSpectra(sim,power=2,total =T)
+plotlyGrowthCurves(sim,percentage=T)
+
+plotDiet(params,species="Cod")
+
+```
+
+If we agree the model has reached an equilibrium, we can take these equilibrium values (n form last timestep) and set up a dynamical run through time (a simlar example is also shown in the mizer vignette).
+
+#### Forcing the model with fishing mortality rate (F) time series
+
+
+```{r}
+
+# note we have sigmoidal trawl slectivity parameters, but we need to set up a gear for each species to force each species separately
+
+# to do this, we need to rebuild the params object 
+inter <- sim@params@interaction
+species_params <- params@species_params
+gear_params<-data.frame(species = species_params$species,
+               gear = species_params$species,
+               sel_func = "sigmoid_length",
+               l25 =  c(7.6, 9.8, 8.7, 10.1, 11.5, 19.8, 16.4, 19.8, 11.5,
+                        19.1, 13.2, 35.3),
+               l50 = c(8.1, 11.8, 12.2, 20.8, 17.0, 29.0, 25.8, 29.0, 17.0,
+                       24.3, 22.9, 43.6),
+               catchability = rep(1,dim(params@species_params)[1]),
+               initial_effort =params@species_params$catchability)
+
+
+# reinitiate the params
+params <- newMultispeciesParams(species_params,
+                                interaction = inter,
+                                kappa = params@resource_params$kappa,
+                                gear_params = gear_params)
+
+
+
+# re-run
+sim <- project(params, effort = gear_params$initial_effort,t_max = 200, dt=0.1,initial_n = sim@n[200,,], initial_npp = sim@n[200,])
+
+plot(sim)
+```
+
+### Forcing changes in species' fishing mortality rates through time
+
+Next, we will read in fishing mortality rate time series (note: this matrix is different to the one I used in the paper, and is out of date. It's just for illustration here for consistency with mizer website, needsto be updated with more recent ICES data).
+
+```{r}
+#read saved data
+
+f_history<-as.matrix(readRDS("data/FmatWeightedInterpolated.rds"))[1:73,]
+row.names(f_history)<-f_history[,1]
+f_history<-f_history[as.character(1947:2019),-1]
+
+
+# check first value 
+firstRecordedEffort <- NULL
+for(iSpecies in 1:ncol(f_history))
+firstRecordedEffort <- c(firstRecordedEffort,f_history[which(!is.na(f_history[,iSpecies]))[1],iSpecies]) # first value of F for each species (different years)
+# Gurnard has no data so inputing same value as whiting
+firstRecordedEffort[8] <- firstRecordedEffort[6]
+
+
+indexFirstEffort<-NULL
+for(iSpecies in 1:ncol(f_history))indexFirstEffort<-c(indexFirstEffort,which(!is.na(f_history[,iSpecies]))[1])
+indexFirstEffort <-indexFirstEffort+100
+
+pre_effort <- matrix(NA, byrow = TRUE, nrow = 100,
+                         ncol = ncol(f_history), dimnames = list(1847:1946))
+
+effort <- as.array(rbind(pre_effort, f_history))
+colnames(effort)<-gear_params$species
+rownames(effort)<-1847:2019
+
+# Historical effort
+
+# Use logistic curve (fit to Fmort data through time), with a descending limb
+# starting from 1850
+
+# f(y) ~ F/(1+ exp(-y0(y-y1))) * F/(1 + exp(-y2(y-y3))
+# where:
+# y1, the year value of the sigmoid's midpoint;
+# F, the curve's maximum value;
+# k, the logistic growth rate or steepness of the curve
+
+
+# Move This to another file...
+# visually fit double logistic curves to fishing moratlit rates ( see Svuwalski et al PNAS)
+
+feffort<- effort
+
+yr<-1847:2019
+
+feffort[,"Sprat"]<-(1.5/(1+ exp(-0.5*(yr-1970))))
+#*(2/(1 + exp(0.1*(yr-2005))))
+plot(1847:2019,effort[,"Sprat"])
+points(1847:2019,feffort[,"Sprat"],col="red")
+
+feffort[,"Sandeel"]<-(1/(1+ exp(-1*(yr-1980))))*(0.3/(1 + exp(0.1*(yr-2005))))
+plot(1847:2019,effort[,"Sandeel"])
+points(1847:2019,feffort[,"Sandeel"],col="red")
+
+
+feffort[,"N.pout"]<-(1.3/(1+ exp(-0.9*(yr-1980))))*(1.3/(1 + exp(0.1*(yr-1995))))
+feffort["2019","N.pout"]<-1.2
+plot(1847:2019,effort[,"N.pout"])
+points(1847:2019,feffort[,"N.pout"],col="red")
+
+feffort[,"Herring"]<-0.1 +(2/(1+ exp(-0.3*(yr-1963))))*(1/(1 + exp(0.1*(yr-1970))))
+plot(1847:2019,effort[,"Herring"])
+points(1847:2019,feffort[,"Herring"],col="red")
+
+feffort[,"Dab"]<-0.1 + (1/(1+ exp(-1*(yr-2002))))
+plot(1847:2019,effort[,"Dab"])
+points(1847:2019,feffort[,"Dab"],col="red")
+
+feffort[,"Whiting"]<-0.1 +(0.9/(1+ exp(-0.2*(yr-1976))))*(1.05/(1 + exp(0.2*(yr-2000))))
+plot(1847:2019,effort[,"Whiting"])
+points(1847:2019,feffort[,"Whiting"],col="red")
+
+feffort[,"Sole"]<- 0.1 + (0.7/(1+ exp(-0.2*(yr-1963))))*(0.9/(1 + exp(0.1*(yr-2015))))
+plot(1847:2019,effort[,"Sole"])
+points(1847:2019,feffort[,"Sole"],col="red")
+
+feffort[,"Gurnard"]<-(1.5/(1+ exp(-0.5*(yr-1978))))*(1.3/(1 + exp(0.1*(yr-2000))))
+plot(1847:2019,effort[,"Gurnard"])
+points(1847:2019,feffort[,"Gurnard"],col="red")
+
+feffort[,"Plaice"]<-0.1+(0.7/(1+ exp(-0.1*(yr-1970))))*(1/(1 + exp(0.2*(yr-2002))))
+plot(1847:2019,effort[,"Plaice"])
+points(1847:2019,feffort[,"Plaice"],col="red")
+
+
+feffort[,"Haddock"]<-0.1+(1/(1+ exp(-0.2*(yr-1968))))*(1/(1 + exp(0.1*(yr-2005))))
+plot(1847:2019,effort[,"Haddock"])
+points(1847:2019,feffort[,"Haddock"],col="red")
+
+
+feffort[,"Cod"]<-0.1+(1/(1+ exp(-0.5*(yr-1975))))
+#*(1.2/(1 + exp(0.09*(yr-2003))))
+plot(1847:2019,effort[,"Cod"])
+points(1847:2019,feffort[,"Cod"],col="red")
+
+feffort[,"Saithe"]<-0.1 + (0.8/(1+ exp(-0.2*(yr-1973))))*(0.9/(1 + exp(0.09*(yr-2003))))
+plot(1847:2019,effort[,"Saithe"])
+points(1847:2019,feffort[,"Saithe"],col="red")
+
+# this takes the extrapolated feffort to fill in historical period, otherwise use feffort as a smoother function
+for(iSpecies in 1:12)
+effort[c(1:indexFirstEffort[iSpecies]),iSpecies]<-feffort[c(1:indexFirstEffort[iSpecies]),iSpecies]
+
+
+## no fishing during war years
+  # effort[as.character(1939:1945),]<-0
+  # effort[as.character(1914:1918),]<-0
+
+
+
+# # reinitiate the params
+ params <- newMultispeciesParams(params@species_params,
+                                interaction = inter,
+                                 kappa = params@resource_params$kappa,
+                                 gear_params = gear_params)
+ 
+ catcha<-getCatchability(params)
+#reset catchability to 1 as using effort as fishing mortality now
+ diag(catcha)<-1
+ 
+params@species_params$erepro["Cod"]<-0.021576892
+params<-setParams(params,catchability = catcha)
+
+effort2<-effort
+effort2[,"Cod"]<-feffort[,"Cod"]
+  
+
+simt <- project(params, effort = effort2,initial_n = sim@n[200,,], initial_npp = sim@n[200,])
+
+
+```
+
+You can zoom in to get a closer look at these in the forcing stage. Here, we are interested in examining the changes along side observations. Let's read in some observe landings for the North Sea and add these to our plot.
+
+```{r}
+
+#read in observed yield values (again need to update these data from ICES)
+
+obsy <- as.matrix(read.csv("data/catchesMat.csv")[1:73,])
+rownames(obsy)<-obsy[,1] 
+#obsy<-ifelse(is.na(obsy),0,obsy)
+obsy <-reshape2::melt(obsy[,-1])
+names(obsy)<-names(y)
+
+
+plotlyBiomass(simt)
+
+########## Get the outputs and plot
+
+plotFittedTime<-function(sim=simt,obsy=obsy,allSpecies=T,plotSpecies=NULL,startyr=1947,endyr=2019){
+
+biomass <- sweep(sim@n, 3, sim@params@w * sim@params@dw, "*")
+params<-sim@params
+effort<-sim@effort
+
+f_gear<-getFMortGear(params,effort)
+yield_species_gear <- apply(sweep(f_gear, c(1, 3, 4), biomass, "*"),
+                                c(1, 2, 3), sum)
+yield_species_gear
+
+yield_species <-apply(yield_species_gear, c(1, 3), sum)
+
+yield_frame <- melt(yield_species)
+
+
+# output modelled yields and reshape for plotting - dont know why built-in getYield function doesn't woprk
+
+# y <- getYield(simt)
+# y <- reshape2::melt(y)
+
+y<-yield_frame[yield_frame$time >= startyr,]
+
+
+# plot these
+
+if (allSpecies ==T) { 
+p<-ggplot(y) + geom_line(data=y, aes(x = time, y = (value)/1e6, 
+            colour = sp)) +
+      geom_point(data=obsy,aes(x = time, y = (value), 
+            colour = sp),size=0.1) +
+    facet_wrap(~sp,scales="free_y") +
+    scale_y_continuous(name = "ield [g/year]")  +
+     scale_colour_manual(values = sim@params@linecolour) +
+    xlim(startyr, endyr)
+}
+
+# look only at  one species at a time and examine on linear 
+if (allSpecies ==F){
+  p<-ggplot(y) + geom_line(data=filter(y,sp==plotSpecies), aes(x = time, y = value/1e6,colour = sp)) +
+      geom_point(data=filter(obsy,sp=="Cod"),aes(x = time, y = value, 
+            colour = sp),size=0.6) +
+    #facet_wrap(~sp) +
+    scale_y_continuous(name = "Yield [g/year]")  +
+    scale_colour_manual(values = sim@params@linecolour) +
+    xlim(startyr, endyr)
+}
+
+return(p)
+}
+
+plotFittedTime(simt,obsy)
+
+```
+
+The trends look kind of OK for some but really not for others.  Remember we re-calibrated this model with completely different assumptions than the before. 
+
+Are the fits in line with our goals for model? They to pass through the cloud of points for some...but not all. Let's have a closer look at a particular species and make sure we use the (less forgiving) linear scale.
+
+```{r}
+
+plotFittedTime(simt,obsy,allSpecies=F,plotSpecies = "Cod",startyr=1847)
+
+```
+
+As expected some of the trends are captured but not the fluctuations. This isn't really suprising, given that the only driver that is changing is fishing (and also the estimates of the fishing mortality rates come from single species stock assessments). Our goal was to cpature trends, hence the fact that the model passes through atleast some of the data points was satisifying our original expectations. 
+
+But we'd really like much better agreement with data here. One issue could be that the erepro values we just re-calibrated the model make the species much more reactive to fishing. Let's examine how sensitive the time series (and their visual agreement to data look when we change our assumptions about eRepro, and possibly Rmax). 
+
+Remember when erepro is 1 essentially all eggs (after density dependent recruitment, Rmax) are available to be eaten and potentially grow.  Explore the consequences of changing erepro at very high (and perhaps very low values of Rmax). 
+
+You could use RShiny to do this interactively instead:
+  
+
+## Re-calibrate the model using the time series data. Either use the initial Rmax values but estimate eRepro, or vice versa since that controls how stocks respond to changes in fishing. May need to think about what other paramters could be estimated here. Mizer Bayesian work has done this with Rmax (Spence et al 2016) and  time-varying Fs (Spence et al 2021).
+
+```{r}
+## need to create a funcgtion in mizer to "hide" this code from users
+
+getErrorTime <- function(vary,params,dat,env=state,tol = 0.1) {
+  
+  params@species_params$R_max[1:12]<-10^vary[1:12]
+  params@species_params$erepro[1:12]<-vary[13:24]
+  params@resource_params$kappa<-10^vary[25]
+  params@resource_params$r_pp<-vary[26]
+
+  params <- setParams(params)
+  # run to steady state and update params
+  # env$params<- projectToSteady(env$params, distance_func = distanceSSLogN,
+  #                 tol = tol, t_max = 200,return_sim = F)
+  
+  params_steady<- projectToSteady(params, distance_func = distanceSSLogN,
+                   tol = tol, t_max = 200,return_sim = F)
+  
+  #run time-varying effort model tthough time with new erepro
+  
+  simt <- project(params_steady, effort = effort,initial_n =  params_steady@initial_n, initial_n_pp = params_steady@initial_n_pp)
+  
+  # get biomass through time
+  biomass <- sweep(simt@n, 3, simt@params@w * simt@params@dw, "*")
+  
+  #get yield through time from model:
+        
+          f_gear<-getFMortGear(params,effort)
+          yield_species_gear <- apply(sweep(f_gear, c(1, 3, 4), biomass, "*"),
+                                c(1, 2, 3), sum)
+          yield_species_gear
+
+          yield_species <-apply(yield_species_gear, c(1, 3), sum)
+
+          yield_frame <- melt(yield_species)
+          
+      # leave out spin up and change units to tonnes    
+          y<-yield_frame[yield_frame$time >= 1947,]
+        
+      # disregard zeroes - these were NAs only filled in to run the model   
+      
+      obs<-dat$value[which(dat$value>0)]/1e3   
+      pred<-y$value[which(dat$value>0)]/1e9
+      
+  # sum of squared errors, could use  log-scale of predictions and data (could change this or use other error or likelihood options)
+    
+    error <- sum((log(pred) - log(obs))^2,na.rm=T)
+  
+  # can use a strong penalty on the error to ensure we reach a minimum of 10% of the data (biomass or catch) for each species
+  # if(any(pred < 0.1*dat)) discrep <- discrep + 1e10
+  
+    return(error)
+
+   }
+
+vary<-c(log10(simt@params@species_params$R_max),simt@params@species_params$erepro,log10(5e11),4)
+
+## test it
+err<-getErrorTime(vary = vary, params = params, dat = obsy)
+
+
+err
+
+```
+
+```{r}
+noCores <- detectCores() - 1 # keep a spare core
+
+cl <- makeCluster(noCores, setup_timeout = 0.5)
+setDefaultCluster(cl = cl)
+clusterExport(cl, as.list(ls()))
+clusterEvalQ(cl, {
+  library(mizerExperimental)
+  library(optimParallel)
+})
+
+tic()
+vary<-c(log10(simt@params@species_params$R_max),simt@params@species_params$erepro,log10(5e11),4)
+optim_result <-optimParallel(par=vary,getErrorTime,params=params, dat = obsy, method   ="L-BFGS-B",lower=c(rep(3,12),rep(1e-3,12),3,1),upper= c(rep(15,12),rep(1,12),15,10),parallel=list(loginfo=TRUE, forward=TRUE))
+
+stopCluster(cl)
+toc() # 80'' using 47 cores
+saveRDS(optim_result,"optim_para_time_result.RDS")
+
+simt2<-readRDS("sim_opt_timeseries.RDS")
+
+#put these new vals intospecies_params and go back to the top of this page to re-check the calibration 
+params@species_params$R_max<-10^optim_result$par[1:12]
+params@species_params$erepro<-optim_result$par[13:24]
+params@resource_params$kappa<-10^optim_result$par[25]
+params@resource_params$r_pp<-optim_result$par[26]
+
+params_opt <- setParams(params)
+
+#re-run time-varying effort model tthough time with new erepro
+sim_opt <- project(params_opt, effort = effort2,initial_n = sim@n[200,,], initial_npp = sim@n_pp[200,])
+
+
+ saveRDS(sim_opt,"sim_opt_time.RDS")
+ 
+simt2<-readRDS("sim_opt_time_series.RDS")
+
+plotFittedTime(sim_opt,obsy)
+
+plotFittedTime(sim_opt,obsy,allSpecies = F,plotSpecies = "Cod")
+
+ 
+```
+
+
+
+######### Links to most recent ICES North Sea stock assessment data I used for above:
+
+Overall database:
+https://standardgraphs.ices.dk/stockList.aspx
+
+
+Sprat: https://standardgraphs.ices.dk/ViewSourceData.aspx?key=13322
+
+Sandeel : https://standardgraphs.ices.dk/ViewCharts.aspx?key=13303
+https://standardgraphs.ices.dk/ViewCharts.aspx?key=13301
+https://standardgraphs.ices.dk/ViewCharts.aspx?key=13298
+https://standardgraphs.ices.dk/ViewCharts.aspx?key=13304
+
+N.pout - https://standardgraphs.ices.dk/ViewCharts.aspx?key=13166
+
+Herring - https://standardgraphs.ices.dk/ViewCharts.aspx?key=13422
+
+Dab - https://standardgraphs.ices.dk/ViewCharts.aspx?key=13184
+ 
+Whiting - https://standardgraphs.ices.dk/ViewCharts.aspx?key=13525
+https://standardgraphs.ices.dk/ViewCharts.aspx?key=13506
+
+Sole - https://standardgraphs.ices.dk/ViewCharts.aspx?key=13743
+https://standardgraphs.ices.dk/ViewCharts.aspx?key=13495
+https://standardgraphs.ices.dk/ViewCharts.aspx?key=13828
+
+Gurnard - https://standardgraphs.ices.dk/ViewCharts.aspx?key=13493
+
+Plaice - https://standardgraphs.ices.dk/ViewCharts.aspx?key=13484
+https://standardgraphs.ices.dk/ViewCharts.aspx?key=13744
+
+Haddock - https://standardgraphs.ices.dk/ViewCharts.aspx?key=13204
+
+Cod - https://standardgraphs.ices.dk/ViewCharts.aspx?key=13740
+https://standardgraphs.ices.dk/ViewCharts.aspx?key=13838
+
+Saithe - https://standardgraphs.ices.dk/ViewCharts.aspx?key=13511
+
+
+# add benthic resource
+# use thermizer
+
+
+
+
