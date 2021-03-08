@@ -1,11 +1,11 @@
 ---
 title: "Example #2: Modelling Changes Through Time"
 author: Julia L. Blanchard
-date: July 2020
+date: March 2021
 place: Hobart, Australia
 output:
-  pdf_document: default
   html_document: default
+  pdf_document: default
 ---
 
 # Introduction 
@@ -17,23 +17,23 @@ Here, we begin with the steady state or equilibrium model that has already been 
 Presumably these get the model in the correct ball-park for each species time-average biomass, abundance, catches, growth etc. We then examine how different variables can "force"" the model away from the equilibrium state. Often a goal is being asked whether the forcing alone is enough to capture the trends in time series - e.g. fishing mortality, phytoplankton abundance, temperature  include examples that have been published.
 
 Aims of this practical example: 
-1) Learn the main steps involved in forcing a size spectrum model
+1) Learn the main steps involved in forcing a size spectrum model that has been calibrated with time-averaged data
 2) Visually compare some of the model predictions with time-series data 
-3) Explore how post-hoc parameter changes can affect model skill through time
+3) Adjusting and re-calibrating the model to time-series data
 
 
 We previously forced with fishing mortality time series using the North Sea model and there are examples for this in the mizer vignette. This model compared predictions to observations, but we did not capture directional environmental change (only noise in the realised recruitment). One potential issue with the deterministic version of the  model is related to the stock recruitment dynamics we assumed. First, we assumed an eRepro of 1 (which essentially ignores any losses of eggs, and assumes all eggs enter the size spectrum are available to be eaten and potentially grow). The second assumption was related to our values of Rmax. We calibrated the model to catches and biomass and estimated Rmax values (least known parameter). 
 
-PART A. Here we will explore the calibrated model and apply the dynamical forcing.
+PART A. Explore the calibrated model and apply the dynamical forcing.
 
 Preliminary set up again... if needed.
 ```{r}
-#get required packages
+#get required packages and functions
 library(mizer)
 library(tidyverse)
-library("parallel")
-library("optimParallel")
-library("tictoc")
+library(parallel)
+library(optimParallel)
+library(tidyverse)
 source("calibration_functions.R")
 
 ```
@@ -48,25 +48,24 @@ params<-sim@params
 # run model to equilibrium and plot results, with fishing.
 # here an effort = 1 will equate to a fihsing mortality rate = 1 and uses the default knife-edge selectivity function
 sim <- project(params, effort = 1, t_max = 200, dt=0.1,initial_n = sim@n[dim(sim@n)[1],,], initial_npp = sim@n[dim(sim@n)[1],])
+```
 
+Let's check some of mizer's plots to see how this model looks.
+
+```{r,warnings=F}
 plot(sim)
 plotSpectra(sim,power=2,total =T)
 plotlyGrowthCurves(sim,percentage=T)
-
 plotDiet(params,species="Cod")
-
 ```
 
 If we agree the model has reached an equilibrium, we can take these equilibrium values (n form last timestep) and set up a dynamical run through time (a simlar example is also shown in the mizer vignette).
 
-#### Forcing the model with fishing mortality rate (F) time series
+#### Changing the fishing parameters
 
+Note we have sigmoidal trawl slectivity parameters, but we need to set up a gear for each species to force each species separately. To do this, we need to rebuild the params object: 
 
 ```{r}
-
-# note we have sigmoidal trawl slectivity parameters, but we need to set up a gear for each species to force each species separately
-
-# to do this, we need to rebuild the params object 
 inter <- sim@params@interaction
 species_params <- params@species_params
 gear_params<-data.frame(species = species_params$species,
@@ -78,17 +77,32 @@ gear_params<-data.frame(species = species_params$species,
                        24.3, 22.9, 43.6),
                catchability = rep(1,dim(params@species_params)[1]),
                initial_effort =params@species_params$catchability)
+```
 
 
-# reinitiate the params
+Then we reinitiate the params object with this new set up and run the model.
+
+In mizer fishing mortality rates at size are estimate from effort, selectivity of the gear and catchability.
+
+In practice effort data do not often come in an easy form to work withand, for simplicity, we have previously used fishing mortality rates for the fully selected size classes as input into this model (which here is assumed to be the product of effort*catchability). 
+
+These can be obtained from single-species assessment models. In the absence of such data, simpler stylied explitation development curves can be constructed or effort can be more explicitly modelled without relying  on stock assessment models, more on this later.
+
+For now let's start by adding the gear_params into the mizer param object as it wasn't quite set up for this type of scenario.
+
+```{r}
 params <- newMultispeciesParams(species_params,
                                 interaction = inter,
                                 kappa = params@resource_params$kappa,
                                 gear_params = gear_params)
 
+#reset catchability to 1 as using effort as fishing mortality now
+catcha<-getCatchability(params)
+diag(catcha)<-1
 
+params<-setParams(params,catchability = catcha)
 
-# re-run
+# re-run to check it
 sim <- project(params, effort = gear_params$initial_effort,t_max = 200, dt=0.1,initial_n = sim@n[200,,], initial_npp = sim@n[200,])
 
 plot(sim)
@@ -96,29 +110,25 @@ plot(sim)
 
 ### Forcing changes in species' fishing mortality rates through time
 
-Next, we will read in fishing mortality rate time series (note: this matrix is different to the one I used in the paper, and is out of date. It's just for illustration here for consistency with mizer website, needsto be updated with more recent ICES data).
+Next, we will read in fishing mortality rate time series. Here I have update dth emodel with the most recent ICES stock assessment Fishing mortality inputs  thorugh time. I have also extrapolated missing historical years using a logistic equation for the development of  fishing over time (see:"setEffortTime.R" ). 
+
+Let's incorporate this time-varying fishing into the model. Note that the effort time series is read into the project() function not the param object.
 
 ```{r}
 # read in stored fishing moratlity (here called effort) time series
 effort<-readRDS("effortTime.RDS")
 
-## reinitiate the params
-params <- newMultispeciesParams(params@species_params,
-                                interaction = inter,
-                                 kappa = params@resource_params$kappa,
-                                 gear_params = gear_params)
- 
-#reset catchability to 1 as using effort as fishing mortality now
-catcha<-getCatchability(params)
-diag(catcha)<-1
- 
-params<-setParams(params,catchability = catcha)
-
 simt <- project(params, effort = effort,initial_n = sim@n[200,,], initial_npp = sim@n[200,])
+
+# why does this not work?
+#plotYieldGear(simt)
+
+
+plotlyBiomass(simt)
 
 ```
 
-You can zoom in to get a closer look at these in the forcing stage. Here, we are interested in examining the changes along side observations. Let's read in some observe landings for the North Sea and add these to our plot.
+Here, we are interested in examining the changes along side observations. Let's read in some observe landings for the North Sea and add these to our plot.
 
 ```{r}
 #read in observed yield values (again need to update these data from ICES)
@@ -127,15 +137,15 @@ rownames(obsy)<-obsy[,1]
 obsy <-reshape2::melt(obsy[,-1])
 names(obsy)<-c("time","sp","value")
 
-
-plotlyBiomass(simt)
 plotFittedTime(simt,obsy)
 
 ```
 
 The trends look kind of OK for some but really not for others.  Remember we re-calibrated this model with completely different assumptions than the before. 
 
-Are the fits in line with our goals for model? They to pass through the cloud of points for some...but not all. Let's have a closer look at a particular species and make sure we use the (less forgiving) linear scale.
+Are the fits in line with our goals for model? They to pass through the cloud of points for some...but not all. 
+
+You can zoom in to get a closer look at these in the forcing stage.
 
 ```{r}
 
@@ -153,26 +163,38 @@ Instead here we will re-calibrate the model using all of the time series data. W
 
 Other paramters could be estimated here, such as the fihsing moratlity parameters. Also Bayesian parameter uncertainty work has done this with Rmax (Spence et al 2016) and  time-varying Fs (Spence et al 2021) using this North Sea model.
 
-Optimistaion is computationally intensive so we will run the below setting up multiple computer cores and using optimParallel.
+Optimistaion is computationally intensive so we will run the below setting up multiple computer cores and using optimParallel. The function getError is user defined and it runs the model and calculates the sum of squared errors between the observed and modelled catches for all species' time series. If you want to see how to write the error function it is in the file "calibration_fuctions.R" and can be examined here:
+
 
 ```{r}
-noCores <- detectCores() - 1 # keep a spare core
-
-cl <- makeCluster(noCores, setup_timeout = 0.5)
-setDefaultCluster(cl = cl)
-clusterExport(cl, as.list(ls()))
-clusterEvalQ(cl, {
-  library(mizerExperimental)
-  library(optimParallel)
-})
-
-tic()
+# some starting values - using log-scale for Rmax and kappa
 vary<-c(log10(simt@params@species_params$R_max),simt@params@species_params$erepro,log10(5e11),4)
-optim_result <-optimParallel(par=vary,getErrorTime,params=params, dat = obsy, method   ="L-BFGS-B",lower=c(rep(3,12),rep(1e-3,12),3,1),upper= c(rep(15,12),rep(1,12),15,10),parallel=list(loginfo=TRUE, forward=TRUE))
 
-stopCluster(cl)
-toc() 
-saveRDS(optim_result,"optim_para_time_result.RDS")
+```
+ 
+We will pass this function to  optimParallel to estimate the lowest sum of squared errors between the observed and modelled catches for all species' time series. If you wat to see how to write the error function it is in the file "calibration_fuctions.R" called "getErrorTime()".
+
+Now, to run in parallell, the first set up a cluster of multiple computer cores to run model in parallel. I have commented this out as it takes a long time to run. For this example we will read in our previously saved the results. It is included here for your future information on how to carry out this optimisation, but is similar to the time-averaged example we have looked at (also see "calibration_functions.R").
+
+```{r}
+#  noCores <- detectCores() - 1 # keep a spare core
+# cl <- makeCluster(noCores, setup_timeout = 0.5)
+#   setDefaultCluster(cl = cl)
+#   clusterExport(cl, as.list(ls()))
+#   clusterEvalQ(cl, {
+#     library(mizerExperimental)
+#     library(optimParallel)
+#   })
+#   
+# # run the optimisation  
+# optim_result <-optimParallel(par=vary,getErrorTime,params=params, dat = obsy, method   ="L-BFGS-B",lower=c(rep(3,12),rep(1e-3,12),3,1),upper= c(rep(15,12),rep(1,12),15,10),parallel=list(loginfo=TRUE, forward=TRUE))
+#   
+# stopCluster(cl)
+# # save results  
+# saveRDS(optim_result,filename="sim_opt_timeseries.RDS")
+
+simt2<-readRDS("sim_opt_timeseries.RDS")
+
 ```
 
 
@@ -180,7 +202,6 @@ Now let's plug these back in and take a look at the plots....
 
 
 ```{r}
-simt2<-readRDS("sim_opt_timeseries.RDS")
 
 #put these new vals intospecies_params and go back to the top of this page to re-check the calibration 
 params@species_params$R_max<-10^optim_result$par[1:12]
@@ -203,5 +224,7 @@ plotFittedTime(sim_opt,obsy,allSpecies = F,plotSpecies = "Cod")
 ```
  
 
+Do these look any better than before? If we cosntruct the yiled curves the Fmsy values seem to be more reasonable. This is becuase the estimates of erepro are taking into account how each species repsonds to fishing through time. However, there are still mismatches between observed and modelled catches. 
 
+Question: Can you think of other reasons why this is the case? (hint: think about how we forced the model)
 

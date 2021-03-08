@@ -54,14 +54,6 @@ getErrorTime <- function(vary,params,dat,env=state,tol = 0.1) {
   
 }
 
-vary<-c(log10(simt@params@species_params$R_max),simt@params@species_params$erepro,log10(5e11),4)
-
-# ## test it
-# err<-getErrorTime(vary = vary, params = params, dat = obsy)
-# 
-# 
-# err
-
 
 ##########------------------------------------------------------
 ########## Plot the outputs of the time series calibration 
@@ -100,7 +92,7 @@ plotFittedTime<-function(sim=simt,obsy=obsy,allSpecies=T,plotSpecies=NULL,starty
       geom_point(data=obsy,aes(x = time, y = (value), 
                                colour = sp),size=0.1) +
       facet_wrap(~sp,scales="free_y") +
-      scale_y_continuous(name = "ield [g/year]")  +
+      scale_y_continuous(name = "yield [g/year]")  +
       scale_colour_manual(values = sim@params@linecolour) +
       xlim(startyr, endyr)
   }
