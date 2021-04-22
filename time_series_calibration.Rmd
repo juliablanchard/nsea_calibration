@@ -19,11 +19,8 @@ Presumably these get the model in the correct ball-park for each species time-av
 Aims of this practical example: 
 1) Learn the main steps involved in forcing a size spectrum model that has been calibrated with time-averaged data
 2) Visually compare some of the model predictions with time-series data 
-<<<<<<< HEAD:time_series_calibration.Rmd
 3) Adjusting and re-calibrating the model to time-series data
-=======
 3) Fitting the model to time-series data
->>>>>>> 162826e5739362320daf171a574380f965b14bb1:time_series_calibration.Rmd
 
 
 We previously forced with fishing mortality time series using the North Sea model and there are examples for this in the mizer vignette. This model compared predictions to observations, but we did not capture directional environmental change (only noise in the realised recruitment). One potential issue with the deterministic version of the  model is related to the stock recruitment dynamics we assumed. First, we assumed an eRepro of 1 (which essentially ignores any losses of eggs, and assumes all eggs enter the size spectrum are available to be eaten and potentially grow). The second assumption was related to our values of Rmax. We calibrated the model to catches and biomass and estimated Rmax values (least known parameter). 
@@ -178,10 +175,7 @@ vary<-c(log10(simt@params@species_params$R_max),simt@params@species_params$erepr
  
 We will pass this function to  optimParallel to estimate the lowest sum of squared errors between the observed and modelled catches for all species' time series. If you wat to see how to write the error function it is in the file "calibration_fuctions.R" called "getErrorTime()".
 
-<<<<<<< HEAD:time_series_calibration.Rmd
 Now, to run in parallell, the first set up a cluster of multiple computer cores to run model in parallel. I have commented this out as it takes a long time to run. For this example we will read in our previously saved the results. It is included here for your future information on how to carry out this optimisation, but is similar to the time-averaged example we have looked at (also see "calibration_functions.R").
-=======
->>>>>>> 162826e5739362320daf171a574380f965b14bb1:time_series_calibration.Rmd
 
 ```{r}
 #  noCores <- detectCores() - 1 # keep a spare core
@@ -204,12 +198,7 @@ simt2<-readRDS("sim_opt_timeseries.RDS")
 
 ```
 
-<<<<<<< HEAD:time_series_calibration.Rmd
-
 Now let's plug these back in and take a look at the plots....
-
-=======
->>>>>>> 162826e5739362320daf171a574380f965b14bb1:time_series_calibration.Rmd
 
 ```{r}
 
