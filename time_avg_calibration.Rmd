@@ -78,7 +78,6 @@ nsParams <- read.csv("data/nsparams.csv")[,-1]
 nsParams[,"r_max"] <- Inf
 
 
-
 ```
 
 

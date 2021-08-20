@@ -54,8 +54,6 @@ getErrorTime <- function(vary,params,dat,env=state,tol = 0.1) {
   
 }
 
-<<<<<<< HEAD
-=======
 #vary<-c(log10(simt@params@species_params$R_max),simt@params@species_params$erepro,log10(5e11),4)
 
 # ## test it
@@ -63,8 +61,6 @@ getErrorTime <- function(vary,params,dat,env=state,tol = 0.1) {
 # 
 # 
 # err
-
->>>>>>> 162826e5739362320daf171a574380f965b14bb1
 
 ##########------------------------------------------------------
 ########## Plot the outputs of the time series calibration 

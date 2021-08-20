@@ -43,7 +43,8 @@ Let's read in the saved calibrated parameters of the North sea model stored in t
 
 ```{r,warnings=F}
 #read saved sim object from previous example
-sim <- readRDS("optim_para_sim.RDS")
+#sim <- readRDS("optim_para_sim.RDS")
+sim <- readRDS("sim_opt_time_series.RDS")
 params<-sim@params
 
 # run model to equilibrium and plot results, with fishing.
@@ -118,6 +119,7 @@ Let's incorporate this time-varying fishing into the model. Note that the effort
 ```{r}
 # read in stored fishing moratlity (here called effort) time series
 effort<-readRDS("effortTime.RDS")
+#effort<-readRDS("logistic_effortTime.RDS")
 
 simt <- project(params, effort = effort,initial_n = sim@n[200,,], initial_npp = sim@n[200,])
 
@@ -150,7 +152,7 @@ You can zoom in to get a closer look at these in the forcing stage.
 
 ```{r}
 
-plotFittedTime(simt,obsy,allSpecies=F,plotSpecies = "Cod",startyr=1847)
+plotFittedTime(simt,obsy,allSpecies=F,plotSpecies = "Cod",startyr=1950)
 
 ```
 

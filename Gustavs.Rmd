@@ -1,0 +1,409 @@
+---
+title: "Explore Gustav's Recipe"
+author: "JB"
+date: "22/08/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+In this blog post we will describe stage 2 of the process of building a mizer model. The stages are:
+
+Collect information about the important species in your ecosystem and how they are fished. This includes physiological parameters for the species as they might be found on fishbase, but also information about how abundant the species are and how they are being fished.
+
+Create a mizer model that in its steady state reproduces the time-averaged observed state of your fish community. Of course your real system never is in a perfect steady state. It is continuously changing. There is much fluctuation from year to year. We will however assume that if we average observations over a number of years we obtain something that is close to the steady state. Without some such assumption it would be impossible for us to get started.
+
+Tune the model parameters further to also reproduce time-series observations that capture some of the system’s sensitivity to perturbations, like changes in fishing pressure.
+
+This blog post is only about the second stage. We will present a 5 step recipe for that stage. When the recipe works, it will only take a couple of minutes! So I hope you will try the recipe for your own model. Of course in practice there are all kinds of things that can (and will) go wrong. So I hope this blog post will lead to some exchange of experiences with the recipe.
+
+The recipe is based on an important trick. I call it the constant reproduction trick. The trick is obvious once you see it, but I must admit that I struggled for a long time with mizer model building until I stumbled upon the trick.
+
+
+
+```{r}
+remotes::install_github("sizespectrum/mizerExperimental")
+library(mizerExperimental)
+```
+
+I will use my file rather than Gustavs so I can compare with optim
+
+```{r,warnings=F}
+
+# loading North Sea data
+# loading North Sea data
+species_params <- read.csv("data/nsparams.csv")[,-1]
+# make sure we dont use Rmax
+species_params <- species_params[,c("species","w_inf","w_mat","beta","sigma","k_vb","sel_func","l25","l50","a","b","catchability","gear")]
+
+## get obs
+# read in time-averaged  catches  
+species_params$catches_observed <-read.csv("data/time-averaged-catches.csv")[,2] # only that one is used at the moment | catches are estimated from fMatW
+# ssb
+species_params$biomass_observed <- read.csv("data/time-averaged-SSB.csv")[,2]
+
+library(knitr)
+kable(species_params, row.names = FALSE)
+
+saveRDS(species_params,"ns_calib_param.RDS")
+```
+
+
+
+
+
+
+Run model
+
+```{r}
+params <- newMultispeciesParams(species_params = species_params,
+                                initial_effort = 1)
+sim <- project(params, t_max = 10)
+animateSpectra(sim, power = 2)
+
+```
+
+
+Mizer has a function called steady() that does the same as the above code, namely run to steady state with constant reproduction and then adjust the reproduction parameters, and then sets the resulting steady state as the initial state of the MizerParams object.
+
+NOTE - but not really the same if constant reproductoin - need to define constants - how does this work?
+
+
+```{r}
+
+params <- newMultispeciesParams(species_params = species_params,
+                                gear_params = gear_params,
+                                initial_effort = 1)
+params <- steady(params)
+plotlySpectra(params, power = 2)
+
+
+### this is faster than project and should work when plugged into project with not change
+
+
+sim <- project(params, t_max = 5)
+plotBiomass(sim)
+
+plotBiomassVsSpecies(params)
+
+
+params <- calibrateBiomass(params) 
+plotBiomassVsSpecies(params)
+
+params <- matchBiomasses(params)
+plotlySpectra(params, power = 2, total = TRUE)
+
+
+plotBiomassVsSpecies(params)
+
+
+params <- steady(params)
+plotBiomassVsSpecies(params)
+
+
+params <- params %>%calibrateBiomass()  %>% matchBiomasses()  %>% steady()
+plotBiomassVsSpecies(params)
+
+
+plotGrowthCurves(params, species_panel = TRUE)
+###Error in eval_tidy(xs[[j]], mask) : 
+###  no slot of name "params" for this object of class "MizerParams"
+
+
+params <- steady(params)
+sim <- project(params, t_max = 10)
+plotBiomass(sim)
+
+plotlySpectra(sim, power = 2, total = TRUE)
+plotGrowthCurves(sim, species_panel = TRUE)
+
+plotDiet2(sim)
+
+# why diet showing other mortality?
+
+```
+
+
+
+Have a look at reproduction ....
+
+```{r}
+library(ggplot2)
+plotBevertonHolt <- function(params, species) {
+  select <- species_params(params)$species == species
+  erepro <- species_params(params)$erepro[select]
+  w0 <- params@w[params@w_min_idx[select]]
+  E_R_ss <- getRDI(params)[select] / erepro * 2 * w0
+  R_dd_ss <- getRDD(params)[select]
+  R_max  <- species_params(params)$R_max[select]
+  E_R <- seq(0, 2 * E_R_ss, length.out = 50)
+  R_di = erepro * E_R / 2 / w0
+  R_dd <- R_di / (1 + R_di / R_max)
+  df <- melt(data.frame(E_R, R_dd, R_di, R_max), id.vars = "E_R")
+  ggplot(df) +
+    geom_line(aes(x = E_R, y = value, linetype = variable)) +
+    geom_point(aes(x = E_R_ss, y = R_dd_ss), size = 3, color = "red") +
+    ylim(NA, 1.1 * R_max) +
+    ylab("Reproduction rate [eggs/year]") +
+    xlab("Energy invested [g/year]")
+}
+
+plotBevertonHolt(params, "Gurnard")
+
+
+select_gurnard <- species_params(params)$species == "Gurnard"
+species_params(params)[select_gurnard, c("erepro", "R_max")]
+
+
+
+reproduction_level <- getReproductionLevel(params)
+reproduction_level
+
+
+params2 <- setBevertonHolt(params, reproduction_level = 0.5)
+plotBevertonHolt(params2, "Gurnard")
+
+
+plotBevertonHolt2 <- function(params, params2, species) {
+  select <- species_params(params)$species == species
+  erepro <- species_params(params)$erepro[select]
+  w0 <- params@w[params@w_min_idx[select]]
+  E_R_ss <- getRDI(params)[select] / erepro * 2 * w0
+  R_dd_ss <- getRDD(params)[select]
+  E_R <- seq(0, 2 * E_R_ss, length.out = 50)
+  
+  R_max  <- species_params(params)$R_max[select]
+  R_di = erepro * E_R / 2 / w0
+  R_dd <- R_di / (1 + R_di / R_max)
+  df <- melt(data.frame(E_R, R_dd, R_di, R_max), id.vars = "E_R")
+  df$Model <- "Model 1"
+  
+  erepro <- species_params(params2)$erepro[select]
+  R_max  <- species_params(params2)$R_max[select]
+  R_di = erepro * E_R / 2 / w0
+  R_dd <- R_di / (1 + R_di / R_max)
+  df2 <- melt(data.frame(E_R, R_dd, R_di, R_max), id.vars = "E_R")
+  df2$Model <- "Model 2"
+  
+  ggplot(rbind(df, df2)) +
+    geom_line(aes(x = E_R, y = value, linetype = variable,
+                  colour = Model, size = Model)) +
+    geom_point(aes(x = E_R_ss, y = R_dd_ss), size = 3, color = "red") +
+    ylim(NA, 1.1 * R_max) +
+    ylab("Reproduction rate [eggs/year]") +
+    xlab("Energy invested [g/year]") +
+    labs(linetype = "", size = "R_max", colour = "R_max") +
+    scale_size_manual(values = c(0.5, 1)) +
+    scale_colour_manual(values = c("blue", "black")) +
+    scale_linetype_manual(values = c("solid", "dashed", "dotted"))
+}
+
+
+plotBevertonHolt2(params, params2, "Cod")
+plotBevertonHolt2(params, params2, "Sprat")
+plotBevertonHolt2(params, params2, "Gurnard")
+
+```
+
+
+```{r}
+remotes::install_github("sizespectrum/mizerExperimental")
+library(mizerExperimental)
+packageVersion("mizerExperimental")
+
+plotYieldVsF(params, "Cod")
+plotYieldVsF(params2, "Cod")
+```
+
+
+
+
+
+
+#### Changing the fishing parameters
+
+
+```{r}
+# re-run to check it
+sim <- project(params2, effort = gear_params$initial_effort,t_max = 200, dt=0.1)
+
+plot(sim)
+```
+
+### Forcing changes in species' fishing mortality rates through time
+
+Next, we will read in fishing mortality rate time series. Here I have update dth emodel with the most recent ICES stock assessment Fishing mortality inputs  thorugh time. I have also extrapolated missing historical years using a logistic equation for the development of  fishing over time (see:"setEffortTime.R" ). 
+
+Let's incorporate this time-varying fishing into the model. Note that the effort time series is read into the project() function not the param object.
+
+```{r}
+# read in stored fishing moratlity (here called effort) time series
+effort<-readRDS("effortTime.RDS")
+
+simt <- project(params2, effort = effort,initial_n = sim@n[200,,], initial_npp = sim@n[200,])
+
+plotYieldGear(simt)
+plotlyBiomass(simt)
+
+```
+
+Here, we are interested in examining the changes along side observations. Let's read in some observe landings for the North Sea and add these to our plot.
+
+```{r}
+#read in observed yield values (again need to update these data from ICES)
+obsy <- as.matrix(read.csv("data/catchesMat.csv")[1:73,])
+rownames(obsy)<-obsy[,1] 
+obsy <-reshape2::melt(obsy[,-1])
+names(obsy)<-c("time","sp","value")
+
+
+source("calibration_functions.R")
+plotFittedTime(simt,obsy)
+
+
+```
+
+The trends look kind of OK for some but really not for others.  Remember we re-calibrated this model with completely different assumptions than the before. 
+
+Are the fits in line with our goals for model? They to pass through the cloud of points for some...but not all. 
+
+You can zoom in to get a closer look at these in the forcing stage.
+
+```{r}
+
+plotFittedTime(simt,obsy,allSpecies=F,plotSpecies = "Cod",startyr=1847)
+
+```
+
+As expected some of the trends are captured but not the fluctuations. This isn't really suprising, given that the only driver that is changing is fishing (and also the estimates of the fishing mortality rates come from single species stock assessments). Our goal was to cpature trends, hence the fact that the model passes through atleast some of the data points was satisifying our original expectations. 
+
+But we'd really like much better agreement with data here. One issue could be that the erepro values we just re-calibrated the model make the species much more reactive to fishing. Let's examine how sensitive the time series (and their visual agreement to data look when we change our assumptions about eRepro, and possibly Rmax). 
+
+Remember when erepro is 1 essentially all eggs (after density dependent recruitment, Rmax) are available to be eaten and potentially grow.  You could explore the consequences of changing erepro at very high (and perhaps very low values of Rmax). 
+
+Instead here we will re-calibrate the model using all of the time series data. We start wil the initial Rmax values but estimate eRepro. Given we have much more data now than in the time averaged calibration we can estiomate more parameters. Because erepro influences how stocks respond to fishing this is an approrpaite one to inlcude, but only when Rmax is also being re-calibrated. In this example we also can re-estimated kappa and r_pp to control the background resource spectrum. 
+
+Other paramters could be estimated here, such as the fihsing moratlity parameters. Also Bayesian parameter uncertainty work has done this with Rmax (Spence et al 2016) and  time-varying Fs (Spence et al 2021) using this North Sea model.
+
+Optimistaion is computationally intensive so we will run the below setting up multiple computer cores and using optimParallel. The function getError is user defined and it runs the model and calculates the sum of squared errors between the observed and modelled catches for all species' time series. If you want to see how to write the error function it is in the file "calibration_fuctions.R" and can be examined here:
+
+
+```{r}
+# some starting values - using log-scale for Rmax and kappa
+vary<-c(log10(simt@params@species_params$R_max),simt@params@species_params$erepro,log10(5e11),4)
+
+read.csv("data/nsparams.csv")[,-1]
+
+```
+ 
+We will pass this function to  optimParallel to estimate the lowest sum of squared errors between the observed and modelled catches for all species' time series. If you wat to see how to write the error function it is in the file "calibration_fuctions.R" called "getErrorTime()".
+
+Now, to run in parallell, the first set up a cluster of multiple computer cores to run model in parallel. I have commented this out as it takes a long time to run. For this example we will read in our previously saved the results. It is included here for your future information on how to carry out this optimisation, but is similar to the time-averaged example we have looked at (also see "calibration_functions.R").
+
+```{r}
+
+library(parallel)
+library(optimParallel)
+
+noCores <- detectCores() - 1 # keep a spare core
+ cl <- makeCluster(noCores, setup_timeout = 0.5)
+   setDefaultCluster(cl = cl)
+   clusterExport(cl, as.list(ls()))
+   clusterEvalQ(cl, {
+     library(mizerExperimental)
+     library(optimParallel)
+   })
+   
+ # run the optimisation  
+ optim_result <-optimParallel(par=vary,getErrorTime,params=params2, dat = obsy, method   ="L-BFGS-B",lower=c(rep(3,12),rep(1e-3,12),3,1),upper= c(rep(15,12),rep(1,12),15,10),parallel=list(loginfo=TRUE, forward=TRUE))
+   
+ stopCluster(cl)
+# # save results  
+saveRDS(optim_result, file="optim_result_timeseries_GD.RDS")
+
+#simt2<-readRDS("sim_opt_timeseries_GD.RDS")
+
+```
+
+Now let's plug these back in and take a look at the plots....
+
+```{r}
+
+#put these new vals intospecies_params and go back to the top of this page to re-check the calibration 
+# params2@species_params$R_max<-10^optim_result$par[1:12]
+# params2@species_params$erepro<-optim_result$par[13:24]
+# params2@resource_params$kappa<-10^optim_result$par[25]
+# params2@resource_params$r_pp<-optim_result$par[26]
+# 
+# params_opt <- setParams(params2)
+
+
+species_params(params2)$R_max<-10^optim_result$par[1:12]
+species_params(params2)$erepro<-optim_result$par[13:24]
+resource_params(params2)$kappa<-10^optim_result$par[25]
+resource_params(params2)$r_pp<-optim_result$par[26]
+
+
+### note: using specie_params(params) messes this up
+
+#re-run time-varying effort model tthough time with new erepro
+sim_opt <- project(params2, effort = effort)
+
+saveRDS(sim_opt,"sim_opt_time_GD.RDS")
+ 
+#simt2<-readRDS("sim_opt_time_series_GD.RDS")
+
+plotFittedTime(sim_opt,obsy)
+
+plotFittedTime(sim_opt,obsy,allSpecies = F,plotSpecies = "Cod")
+
+
+#### also check yield curves
+plotYieldVsF(params2, "Sprat",no_steps=50)
+getYieldVsF(params2, "Gurnard")
+getYieldVsF(params2, "Sprat")
+```
+ 
+
+
+```{r}
+
+#COMPARE TO PREVIOUS ONES
+optim_para_time_result <-readRDS("~/Dropbox/nsea_calibration/nsea_calibration/optim_para_time_result.RDS")
+# 
+# params@species_params$R_max<-10^optim_para_time_result$par[1:12]
+# params@species_params$erepro<-optim_para_time_result$par[13:24]
+# params@resource_params$kappa<-10^optim_para_time_result$par[25]
+# params@resource_params$r_pp<-optim_para_time_result$par[26]
+# 
+# params_opt <- setParams(params)
+
+
+species_params(params2)$R_max<-10^optim_para_time_result$par[1:12]
+species_params(params2)$erepro<-optim_para_time_result$par[13:24]
+resource_params(params2)$kappa<-10^optim_para_time_result$par[25]
+resource_params(params2)$r_pp<-optim_para_time_result$par[26]
+
+
+
+#re-run time-varying effort model tthough time with new erepro
+sim_opt <- project(params2, effort = effort)
+
+saveRDS(sim_opt,"sim_opt_time_GD.RDS")
+ 
+#simt2<-readRDS("sim_opt_time_series_GD.RDS")
+
+plotFittedTime(sim_opt,obsy)
+
+plotFittedTime(sim_opt,obsy,allSpecies = F,plotSpecies = "Cod")
+```
+
+
+
+Do these look any better than before? If we construct the yield curves the Fmsy values seem to be more reasonable. This is because the estimates of erepro are taking into account how each species repsonds to fishing through time. However, there are still mismatches between observed and modelled catches. 
+
+Question: Can you think of other reasons why this is the case? (hint: think about how we forced the model)
+
