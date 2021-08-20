@@ -39,7 +39,7 @@ Therefore we will always want to make sure we are loading the latest version of
 the package with
 
 ```{r}
-remotes::install_github("sizespectrum/mizerExperimental")
+#remotes::install_github("sizespectrum/mizerExperimental")
 library(mizerExperimental)
 ```
 
@@ -294,8 +294,8 @@ plotFittedTime(sim_opt,obsy,allSpecies = F,plotSpecies = "Cod")
 
 #### also can check how these new params perform in terms of the equlibrium yield curves
 plotYieldVsF(params2, "Sprat")
-getYieldVsF(params2, "Gurnard")
-getYieldVsF(params2, "Cod")
+plotYieldVsF(params2, "Gurnard")
+plotYieldVsF(params2, "Cod")
 ```
 
 Interpretation of plots. Next steps.
