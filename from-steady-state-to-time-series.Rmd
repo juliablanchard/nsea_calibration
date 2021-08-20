@@ -278,7 +278,6 @@ Now let's plug these back in and take a look at the plots....
 
 #put these new vals intospecies_params and go back to the top of this page to re-check the calibration 
 
-
 species_params(params2)$R_max<-10^optim_result$par[1:12]
 species_params(params2)$erepro<-optim_result$par[13:24]
 resource_params(params2)$kappa<-10^optim_result$par[25]
