@@ -1,1 +1,17 @@
 load("/Users/juliab6/Dropbox/HOW TO mizer/Course/HowTo/inst/HTM3/optim_para_time_result.RDS")
+load("/Users/juliab6/Dropbox/julia/WORK/Research/Current Projects/IMAGE/sizeBasedStuff/NorthSea/output/opCom1_11D0.Rdata")
+dd
+ls()
+dim(opCom1)
+opCom1
+head(opCom1)
+library(purrr)#
+library(zoo)#
+library(Hmisc)#
+library(mgcv)#
+library(data.table)#
+library(tidyverse)#
+library(ggpubr)#
+library(rvest)#
+library(stringr)#
+library(magrittr)

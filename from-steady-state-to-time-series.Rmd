@@ -41,6 +41,8 @@ the package with
 ```{r}
 #remotes::install_github("sizespectrum/mizerExperimental")
 library(mizerExperimental)
+#remotes::install_github("sizespectrum/mizerHowTo")
+library(mizerHowTo)
 ```
 
 This blog post was compiled with mizer version  `r packageVersion("mizer")`
@@ -50,6 +52,7 @@ We again will use the North Sea model, this time already set up with the biomass
 
 ```{r, code_folding=TRUE, layout="l-body-outset"}
 species_params <- readRDS("data-for-steady-to-time/ns_calib_param.RDS")
+
 ```
 
 # A recap on getting the steady state
@@ -70,22 +73,23 @@ gear_params<-data.frame(species = species_params$species,
                         19.1, 13.2, 35.3),
                l50 = c(8.1, 11.8, 12.2, 20.8, 17.0, 29.0, 25.8, 29.0, 17.0,
                        24.3, 22.9, 43.6),
-               catchability = rep(1,dim(species_params)[1]),
-               initial_effort =species_params$catchability)
+               catchability = rep(1,dim(species_params)[1]))
 
-params <- newMultispeciesParams(species_params = species_params,gear_params=gear_params,inter,max_w=1e6) # inter comes with loading "mizer")
+params <- newMultispeciesParams(species_params = species_params,gear_params=gear_params,inter,initial_effort = species_params$catchability,max_w=1e6) # inter comes with loading "mizer")
 species_params(params)$gear<-species_params(params)$species
 params <- steady(params)
 plotlySpectra(params, power = 2)
 ```
 
-We can then check this new params object does produce a steady state.
+We can project the new params object to steady state and then check it.
 
 ```{r,code_folding=TRUE}
-sim <- project(params,effort=gear_params$initial_effort, t_max = 5)
+sim <- project(params,effort=initial_effort(params), t_max = 100)
 plot(sim)
+gear_params(params)
 ```
 
+This shows there is a steady state with coexistence for all species, reasonable feeding level and size spectrum. How well do the biomasses match the observations?
 
 Using the handy function 'calibrateBiomass' scales the system (background resource and other linked parameters) to get the total biomass in the model to match up with the total observed biomass of all 12 species. Then 'matchBiomass' calculates the scaling needed for each of the species' biomasses to match up to their observed ones. This part is a bit of an iterative process: match biomass, calculate steady steady, re-check match to  biomass  and repeatt until satisfactory. It uses %>% from tidyverse to make this easy.
 
@@ -98,8 +102,7 @@ plotBiomassVsSpecies(params)
 Pretty good! Now let's check we are at steady state and have a look to see if the  size spectra look OK: 
 
 ```{r,code_folding=TRUE}
-# note: for the growth curves, this step needed a sim object not params as in the blog, so below I have projected forward from steady to create a sim object
-sim <- project(params,effort=gear_params$initial_effort,t_max = 10)
+sim <- project(params,effort=initial_effort(params),t_max = 10)
 plotlySpectra(sim, power = 2, total = TRUE)
 
 ```
@@ -116,13 +119,22 @@ library(mizerHowTo)
 plotDiet2(sim)
 ```
 
-We now have a steady state that we can use as a starting point for tunit the model through time. This involves considering
+
+Let's also check the biomass versus observations to ensure we are in the right ball park.
+
+```{r}
+plotBiomassObservedVsModel(sim,ratio=T)
+plotYieldObservedVsModel(sim,ratio=T)
+```
+
+
+We now have a steady state that we can use as a starting point for tuning the model through time. This involves considering
 [density dependence in reproduction](https://blog.mizer.sizespectrum.org/posts/2021-08-03-density-dependence-in-reproduction/), in models.
 
 
 # Setting up density dependence in reproduction
 
-In the above steps we have not incorporate the additional sources of density dependence not fully captured by the model. We can confirm this from:
+In the above steps we have not checked what the additional sources of density dependence not fully captured by the model are set to. We can examine this from:
 
 ```{r,code_folding=TRUE}
 reproduction_level <- getReproductionLevel(params)
@@ -133,12 +145,13 @@ And we can double check to confirm that Rmax = "Inf", and only erepro values are
 ```{r,code_folding=TRUE}
 species_params(params)[, c("erepro", "R_max")]
 ```
+There seems to be some density dependence for some species but not others.
 
 Additional unaccounted for density dependence could include habitat, are extra sources of mortality or reproductive success. These parameters along with erepro, the reproductive efficiencies, affect how species collapse (and recover) under changes in fishing through time. 
 
 We may wish to not include any additional density dependence, or we may wish to find out, what the best estimates of these values are, when the model is fit to time series data. This is what we will do below, this time using catch data through time, and  time-varying fishing mortality rates as inputs (derived from stock assessments). In a later post I will show how we can avoid the circularity of stock assessment inputs and use effort information directly. For now, they suit our purpose.
 
-First, we need to assume some level of density dependence to get started. Arbritrality I will choose 0.9 to get some values, and we can also have a look at how this appears in the stock-recruitment function:
+First, we need to assume some level of density dependence to get started. Arbritralily I will choose 0.9 to get some values, and we can also have a look at how this appears in the stock-recruitment function:
 
 ```{r,code_folding=TRUE}
 params2 <- setBevertonHolt(params, reproduction_level = 0.9)
@@ -187,7 +200,7 @@ We can re-run the model to check it still reaches a steady state:
 ```{r}
 # re-run to check it
 params2 <- steady(params2)
-sim <- project(params2,effort=gear_params$initial_effort, t_max = 100)
+sim <- project(params2,effort=initial_effort(params2), t_max = 100)
 plot(sim)
 ```
 
