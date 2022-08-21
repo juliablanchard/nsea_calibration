@@ -2,24 +2,24 @@
 ########## Calculate error function for time series calibration 
 ##########------------------------------------------------------
 
-getErrorTime <- function(vary,params,dat,env=state,tol = 0.1) {
+getErrorTime <- function(vary,params,effort,dat,env=state,tol = 0.1) {
   
-  params@species_params$R_max[1:12]<-10^vary[1:12]
-  params@species_params$erepro[1:12]<-vary[13:24]
-  params@resource_params$kappa<-10^vary[25]
-  params@resource_params$r_pp<-vary[26]
+  params@species_params$R_max[1:dim(species_params(params))[1]]<-10^(vary[1]*species_params(params)$w_inf^vary[2])
+  params@species_params$erepro[1:dim(species_params(params))[1]]<-vary[3]*species_params(params)$w_inf^vary[4]
+  #params@resource_params$kappa<-10^vary[25]
+  #params@resource_params$r_pp<-vary[26]
   
   params <- setParams(params)
   # run to steady state and update params
   # env$params<- projectToSteady(env$params, distance_func = distanceSSLogN,
   #                 tol = tol, t_max = 200,return_sim = F)
   
-  params_steady<- projectToSteady(params, distance_func = distanceSSLogN,
-                                  tol = tol, t_max = 200,return_sim = F)
+  #params_steady<- projectToSteady(params, distance_func = distanceSSLogN,
+  #                               tol = tol, t_max = 200,return_sim = F)
   
   #run time-varying effort model tthough time with new erepro
   
-  simt <- project(params_steady, effort = effort,initial_n =  params_steady@initial_n, initial_n_pp = params_steady@initial_n_pp)
+  simt <- project(params, effort = effort,initial_n =  params@initial_n, initial_n_pp = params@initial_n_pp)
   
   # get biomass through time
   biomass <- sweep(simt@n, 3, simt@params@w * simt@params@dw, "*")
@@ -69,26 +69,10 @@ getErrorTime <- function(vary,params,dat,env=state,tol = 0.1) {
 
 plotFittedTime<-function(sim=simt,obsy=obsy,allSpecies=T,plotSpecies=NULL,startyr=1947,endyr=2019){
   
-  biomass <- sweep(sim@n, 3, sim@params@w * sim@params@dw, "*")
-  params<-sim@params
-  effort<-sim@effort
-  
-  f_gear<-getFMortGear(params,effort)
-  yield_species_gear <- apply(sweep(f_gear, c(1, 3, 4), biomass, "*"),
-                              c(1, 2, 3), sum)
-  yield_species_gear
-  
-  yield_species <-apply(yield_species_gear, c(1, 3), sum)
-  
-  yield_frame <- melt(yield_species)
-  
-  
   # output modelled yields and reshape for plotting - dont know why built-in getYield function doesn't woprk
   
-  # y <- getYield(simt)
-  # y <- reshape2::melt(y)
-  
-  y<-yield_frame[yield_frame$time >= startyr,]
+   y <- getYield(simt)
+   y <- reshape2::melt(y)
   
   
   # plot these
@@ -117,3 +101,69 @@ plotFittedTime<-function(sim=simt,obsy=obsy,allSpecies=T,plotSpecies=NULL,starty
   
   return(p)
 }
+
+### Helpful functions
+
+
+
+# function for calibration of Rmax
+fastOptim <- function(params)
+{
+  # create set of params for the optimisation process
+  params_optim <- params
+  vary <-  c(log10(params_optim@species_params$R_max),params2@species_params$erepro) # variable to explore
+  params_optim<-setParams(params_optim)
+  # set up workers
+  noCores <- parallel::detectCores() - 1 # keep some spare core
+  cl <- parallel::makeCluster(noCores, setup_timeout = 0.5)
+  setDefaultCluster(cl = cl)
+  clusterExport(cl, varlist = "cl",envir=environment())
+  clusterEvalQ(cl, {
+    library(mizerExperimental)
+    library(optimParallel)
+  })
+  optim_result <- optimParallel::optimParallel(par=vary,getErrorTime,params=params_optim, dat = params_optim@species_params$biomass_observed, data_type = "SSB", method   ="L-BFGS-B", lower=c(rep(3,dim(params_optim@species_params)[1])), upper= c(rep(15,dim(params_optim@species_params)[1])),
+                                               parallel=list(loginfo=TRUE, forward=TRUE))
+  stopCluster(cl)
+  params_optim@species_params$R_max <- 10^optim_result$par 
+  sim_optim <- project(params_optim, t_max = 2000)
+  return(sim_optim)
+}
+
+
+
+
+# function running tuneParams function in a row for a quick start to a calibration
+fastCalib <- function(params, match = F)
+{
+  params <- calibrateBiomass(params) # changes kappa and rmax
+  if(match) params <- matchBiomasses(params) # set rmax to inf and adjust erepro
+  params <- steady(params, tol = 0.001)
+  sim <- project(params, t_max = 1000)
+  return(sim)
+}
+
+# removing effort = 1 so always using intial effort and removing /1e6 so everything is in grams
+getError2 <- function (vary, params, dat, data_type = "catch", tol = 0.1, 
+                       timetorun = 10) 
+{
+  params@species_params$R_max[] <- 10^vary[1:length(params@species_params$R_max)]
+  params <- setParams(params)
+  params <- projectToSteady(params, distance_func = distanceSSLogN, 
+                            tol = tol, t_max = 200, return_sim = F)
+  sim <- project(params, t_max = timetorun, progress_bar = F)
+  if (data_type == "SSB") {
+    output <- getSSB(sim)[timetorun, ]
+  }
+  if (data_type == "catch") {
+    output <- getYield(sim)[timetorun, ]
+  }
+  pred <- log(output)
+  dat <- log(dat)
+  discrep <- pred - dat
+  discrep <- (sum(discrep^2))
+  return(discrep)
+}
+
+
+
