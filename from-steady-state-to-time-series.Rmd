@@ -227,8 +227,7 @@ reproduction_level <- getReproductionLevel(params)
 reproduction_level
 ```
 
-And we can double check to confirm that Rmax = "Inf", and only erepro
-values are entered, for each species:
+And we can double check to see what the Rmax and erepro values, for each species:
 
 ```{r,code_folding=TRUE}
 species_params(params)[, c("erepro", "R_max")]
@@ -341,24 +340,49 @@ add these to our plot.
 ```{r,warning=FALSE}
 source("calibration_functions.R")
 
-obsy <-readRDS("yields_time.RDS")
- 
-plotFittedTime(simt,obsy)
+yields_obs <-readRDS("yields_time.RDS")
+names(yields_obs)<-c("Year","Species","Yield")
+
+
+plotYield(simt) +    facet_wrap(~Species,scales="free_y")+
+geom_point(data=yields_obs,aes(x = Year, y = (Yield), colour = Species),size=0.1)
+
 
 ```
 
 Currently, for some species we can see the modeled yields are not near the data time series, but others look broadly ok. Also the stocks seem to collapse earlier in the model than the data. Remember we arbitrarily set the density dependence for all species to 0.9.
 
-What would the density dependence need to be in order to fit the time series data better?
+
+If we look at the parameters without density dependence we can see stocks collapsed even earlier.
 
 ```{r}
-simt2<- project(params2, effort = effort)
-plotFittedTime(simt,obsy)
+simt2<- project(params, effort = effort)
+
+plotYield(simt2) +    facet_wrap(~Species,scales="free_y")+
+geom_point(data=yields_obs,aes(x = Year, y = (Yield), colour = Species),size=0.1)
+
 
 ```
 
+
+What would the reproduction parameters need to be in order to fit the overall time series data better?
+
 One issue could be that the erepro values we just re-calibrated the model make the species much more reactive to fishing. Let's examine how
 sensitive the time series (and their visual agreement to data look when we change our assumptions about eRepro, and possibly Rmax).
+
+First let's just see what happens if we reset erepro and R_max directly.
+```{r}
+params_erepro<-params
+species_params(params_erepro)["Cod",]$erepro<-0.00005
+species_params(params_erepro)["Cod",]$R_max<-800
+
+simt4<- project(params_erepro, effort = effort)
+
+plotYield(simt4,species="Cod") +    facet_wrap(~Species,scales="free_y")+
+geom_point(data=filter(yields_obs,Species=="Cod"),aes(x = Year, y = (Yield), colour = Species),size=0.1)
+```
+
+
 
 Given we have much more data now than in the time averaged calibration
 we can estimate more parameters. Because erepro influences how stocks
@@ -377,13 +401,11 @@ Optimisation is computationally intensive so we will run the below
 setting up multiple computer cores and using *optimParallel*. The
 function *getErrorTime* is user defined and it runs the model and
 calculates the sum of squared errors between the observed and modeled
-catches for all species' time series. If you want to see how to write
-the error function it is in the file "calibration_functions.R" and can
-be examined here:
+catches for all species' time series. 
 
 We will pass this function to *fastOptim()* to estimate the lowest sum
 of squared errors between the observed and modelled catches for all
-species' time series. If you wat to see how to write the error function
+species' time series. If you want to see how to write the error function
 it is in the file "calibration_fuctions.R" called "getErrorTime()".
 
 Now, to run in parallel, the first set up a cluster of multiple computer
@@ -392,7 +414,17 @@ looooong time to run (so, depending on your computer you might want to
 do it while you take a break). For this example, we will just read in
 our previously saved the results.
 
+
+
 ```{r,code_folding=TRUE,eval=F}
+
+# vary <-  c(log10(species_params(params_erepro)$R_max),species_params(params_erepro)$erepro)
+#  
+# er<-getErrorTime(vary,params2,effort, yields_obs)
+# er
+# fastOptim(params=params2)
+
+
 library(parallel)
 library(pbapply)
 library(lhs)
@@ -403,16 +435,15 @@ params<-simt@params
 
 set.seed(1234)
 # num runs
-num_iter=10
-X <- data.frame(randomLHS(num_iter, 4))
+num_iter=100
+X <- data.frame(randomLHS(num_iter, 24))
 # rows are iterations, columns are specific parameters
-colnames(X)<-(1:4)
+colnames(X)<-(1:24)
 #if the first column is Rmax and you want it to be bound by say, 0.25 and 0.5, as above you do this:
 
-X[,1] <- X[,1]*max(log10(species_params(params)$R_max)) 
-X[,2] <- X[,2]
-X[,3] <-X[,3]-mean(species_params(params)$erepro)
-X[,4] <-X[,4]-X[,4]
+X[,1:12] <- X[,1:12]*max(log10(species_params(params2)$R_max)) 
+
+X[,13:24] <- X[,13:24]*mean(species_params(params2)$erepro) 
 
 summary(X)
 
@@ -420,12 +451,25 @@ summary(X)
 
 library(pbapply)
 
-X$error<- pbapply(X,1,getErrorTime,params,dat=obsy,effort)
+X$error<- pbapply(X,1,getErrorTime,params,dat=yields_obs,effort)
+saveRDS(X,"lhs_paramspace.RDS")
+
 # find param set with the lowest error
 findmin<-which(X$error==min(X$error,na.rm=T))
-X[findmin,]
+vary<-X[findmin,1:24]
 
-saveRDS(X,"lhs_paramspace.RDS")
+# assign these to the param object
+species_params(params2)$R_max<-10^(vary[1:dim(species_params)[1]])
+
+species_params(params2)$erepro<-vary[(dim(species_params)[1]+1):(dim(species_params)[1]*2)]
+ 
+
+simt5<- project(params2, effort = effort)
+
+plotYield(simt5,species="Cod") +    facet_wrap(~Species,scales="free_y")+
+geom_point(data=filter(yields_obs,Species=="Cod"),aes(x = Year, y = (Yield), colour = Species),size=0.1)
+
+
 ```
 
 ```
@@ -437,7 +481,7 @@ Now let's plug these back in and take a look at the plots....
 
 ```{r,code_folding=TRUE}
 
-#put these new vals intospecies_params and go back to the top of this page to re-check the calibration 
+#put these new vals into species_params and go back to the top of this page to re-check the calibration 
 
 species_params(params2)$R_max<-10^optim_result$par[1:12]
 species_params(params2)$erepro<-optim_result$par[13:24]

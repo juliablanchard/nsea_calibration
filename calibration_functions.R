@@ -4,12 +4,10 @@
 
 getErrorTime <- function(vary,params,effort,dat,env=state,tol = 0.1) {
   
-  params@species_params$R_max[1:dim(species_params(params))[1]]<-10^(vary[1]*species_params(params)$w_inf^vary[2])
-  params@species_params$erepro[1:dim(species_params(params))[1]]<-vary[3]*species_params(params)$w_inf^vary[4]
-  #params@resource_params$kappa<-10^vary[25]
-  #params@resource_params$r_pp<-vary[26]
+  species_params(params)$R_max<-10^(vary[1:dim(species_params)[1]])
+  species_params(params)$erepro<-vary[(dim(species_params)[1]+1):(dim(species_params)[1]*2)]
   
-  params <- setParams(params)
+  # params <- setParams(params)
   # run to steady state and update params
   # env$params<- projectToSteady(env$params, distance_func = distanceSSLogN,
   #                 tol = tol, t_max = 200,return_sim = F)
@@ -19,7 +17,7 @@ getErrorTime <- function(vary,params,effort,dat,env=state,tol = 0.1) {
   
   #run time-varying effort model tthough time with new erepro
   
-  simt <- project(params, effort = effort,initial_n =  params@initial_n, initial_n_pp = params@initial_n_pp)
+  simt <- project(params, effort = effort)
   
   # get biomass through time
   biomass <- sweep(simt@n, 3, simt@params@w * simt@params@dw, "*")
@@ -35,13 +33,13 @@ getErrorTime <- function(vary,params,effort,dat,env=state,tol = 0.1) {
   
   yield_frame <- melt(yield_species)
   
-  # leave out spin up and change units to tonnes    
+  # leave out spin up    
   y<-yield_frame[yield_frame$time >= 1947,]
   
   # disregard zeroes - these were NAs only filled in to run the model   
   
-  obs<-dat$value[which(dat$value>0)]/1e3   
-  pred<-y$value[which(dat$value>0)]/1e9
+  obs<-dat$Yield/1e9 
+  pred<-y$value/1e9
   
   # sum of squared errors, could use  log-scale of predictions and data (could change this or use other error or likelihood options)
   
@@ -83,7 +81,7 @@ plotFittedTime<-function(sim=simt,obsy=obsy,allSpecies=T,plotSpecies=NULL,starty
       geom_point(data=obsy,aes(x = time, y = (value), 
                                colour = sp),size=0.1) +
       facet_wrap(~sp,scales="free_y") +
-      scale_y_continuous(name = "yield [t/year]")  +
+      scale_y_continuous(name = "yield [g/year]")  +
       scale_colour_manual(values = sim@params@linecolour) +
       xlim(startyr, endyr)
   }
@@ -111,8 +109,7 @@ fastOptim <- function(params)
 {
   # create set of params for the optimisation process
   params_optim <- params
-  vary <-  c(log10(params_optim@species_params$R_max),params2@species_params$erepro) # variable to explore
-  params_optim<-setParams(params_optim)
+  vary <-  c(log10(params_optim@species_params$R_max)) # variable to explore
   # set up workers
   noCores <- parallel::detectCores() - 1 # keep some spare core
   cl <- parallel::makeCluster(noCores, setup_timeout = 0.5)
@@ -122,10 +119,10 @@ fastOptim <- function(params)
     library(mizerExperimental)
     library(optimParallel)
   })
-  optim_result <- optimParallel::optimParallel(par=vary,getErrorTime,params=params_optim, dat = params_optim@species_params$biomass_observed, data_type = "SSB", method   ="L-BFGS-B", lower=c(rep(3,dim(params_optim@species_params)[1])), upper= c(rep(15,dim(params_optim@species_params)[1])),
+  optim_result <- optimParallel::optimParallel(par=vary,getErrorTime,params=params_optim, dat = yields_obs, method   ="L-BFGS-B", lower=c(rep(3,dim(params_optim@species_params)[1])), upper= c(rep(15,dim(params_optim@species_params)[1])),
                                                parallel=list(loginfo=TRUE, forward=TRUE))
   stopCluster(cl)
-  params_optim@species_params$R_max <- 10^optim_result$par 
+  species_params(params_optim)$R_max <- 10^optim_result$par 
   sim_optim <- project(params_optim, t_max = 2000)
   return(sim_optim)
 }
