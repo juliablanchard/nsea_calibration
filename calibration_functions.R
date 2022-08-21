@@ -4,8 +4,15 @@
 
 getErrorTime <- function(vary,params,effort,dat,env=state,tol = 0.1) {
   
+<<<<<<< HEAD
   species_params(params)$R_max<-10^(vary[1:dim(species_params)[1]])
   species_params(params)$erepro<-vary[(dim(species_params)[1]+1):(dim(species_params)[1]*2)]
+=======
+  params@species_params$R_max[1:dim(species_params(params))[1]]<-10^(vary[1]*species_params(params)$w_inf^vary[2])
+  params@species_params$erepro[1:dim(species_params(params))[1]]<-vary[3]*species_params(params)$w_inf^vary[4]
+  #params@resource_params$kappa<-10^vary[25]
+  #params@resource_params$r_pp<-vary[26]
+>>>>>>> 568828e7cdcc8fea4c0c5359bad67916c29cce46
   
   # params <- setParams(params)
   # run to steady state and update params
@@ -17,7 +24,11 @@ getErrorTime <- function(vary,params,effort,dat,env=state,tol = 0.1) {
   
   #run time-varying effort model tthough time with new erepro
   
+<<<<<<< HEAD
   simt <- project(params, effort = effort)
+=======
+  simt <- project(params, effort = effort,initial_n =  params@initial_n, initial_n_pp = params@initial_n_pp)
+>>>>>>> 568828e7cdcc8fea4c0c5359bad67916c29cce46
   
   # get biomass through time
   biomass <- sweep(simt@n, 3, simt@params@w * simt@params@dw, "*")
@@ -109,7 +120,12 @@ fastOptim <- function(params)
 {
   # create set of params for the optimisation process
   params_optim <- params
+<<<<<<< HEAD
   vary <-  c(log10(params_optim@species_params$R_max)) # variable to explore
+=======
+  vary <-  c(log10(params_optim@species_params$R_max),params2@species_params$erepro) # variable to explore
+  params_optim<-setParams(params_optim)
+>>>>>>> 568828e7cdcc8fea4c0c5359bad67916c29cce46
   # set up workers
   noCores <- parallel::detectCores() - 1 # keep some spare core
   cl <- parallel::makeCluster(noCores, setup_timeout = 0.5)
@@ -119,10 +135,17 @@ fastOptim <- function(params)
     library(mizerExperimental)
     library(optimParallel)
   })
+<<<<<<< HEAD
   optim_result <- optimParallel::optimParallel(par=vary,getErrorTime,params=params_optim, dat = yields_obs, method   ="L-BFGS-B", lower=c(rep(3,dim(params_optim@species_params)[1])), upper= c(rep(15,dim(params_optim@species_params)[1])),
                                                parallel=list(loginfo=TRUE, forward=TRUE))
   stopCluster(cl)
   species_params(params_optim)$R_max <- 10^optim_result$par 
+=======
+  optim_result <- optimParallel::optimParallel(par=vary,getErrorTime,params=params_optim, dat = params_optim@species_params$biomass_observed, data_type = "SSB", method   ="L-BFGS-B", lower=c(rep(3,dim(params_optim@species_params)[1])), upper= c(rep(15,dim(params_optim@species_params)[1])),
+                                               parallel=list(loginfo=TRUE, forward=TRUE))
+  stopCluster(cl)
+  params_optim@species_params$R_max <- 10^optim_result$par 
+>>>>>>> 568828e7cdcc8fea4c0c5359bad67916c29cce46
   sim_optim <- project(params_optim, t_max = 2000)
   return(sim_optim)
 }

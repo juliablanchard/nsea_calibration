@@ -63,7 +63,12 @@ This blog post was compiled with mizer version
 `r packageVersion("mizer")` and mizerExperimental version
 `r packageVersion("mizerExperimental")`
 
+<<<<<<< HEAD
 We again will use the North Sea model parameters which includes time-averaged biomass and yield observations needed to carry out this example.
+=======
+We again will use the North Sea model, this time already set up with the
+biomass observations:
+>>>>>>> 568828e7cdcc8fea4c0c5359bad67916c29cce46
 
 ```{r, code_folding=TRUE, layout="l-body-outset"}
 species_params <- readRDS("data-for-steady-to-time/ns_calib_param.RDS")
@@ -227,7 +232,12 @@ reproduction_level <- getReproductionLevel(params)
 reproduction_level
 ```
 
+<<<<<<< HEAD
 And we can double check to see what the Rmax and erepro values, for each species:
+=======
+And we can double check to confirm that Rmax = "Inf", and only erepro
+values are entered, for each species:
+>>>>>>> 568828e7cdcc8fea4c0c5359bad67916c29cce46
 
 ```{r,code_folding=TRUE}
 species_params(params)[, c("erepro", "R_max")]
@@ -292,16 +302,31 @@ plotBevertonHolt2 <- function(params, params2, species) {
 
 plotBevertonHolt2(params, params2, "Cod")
 plotBevertonHolt2(params, params2, "Sprat")
+<<<<<<< HEAD
+=======
 
 
 ```
+>>>>>>> 568828e7cdcc8fea4c0c5359bad67916c29cce46
 
 Ideally, using the level of density dependence we think should be
 correct the yield curves would look dome-shaped and consistent with
 theory. But how do we know what level of density dependence to set in
 real ecosystems?
 
+```{r,code_folding=T}
 
+```
+
+<<<<<<< HEAD
+Ideally, using the level of density dependence we think should be
+correct the yield curves would look dome-shaped and consistent with
+theory. But how do we know what level of density dependence to set in
+real ecosystems?
+
+
+=======
+>>>>>>> 568828e7cdcc8fea4c0c5359bad67916c29cce46
 An alternative approach could be to confront the model with time series
 data of catches, and to estimate the reproduction parameters that way.
 
@@ -319,9 +344,15 @@ plot(sim)
 Next, we will force the model through time with changes in fishing mortality. These are
 fairly recent ICES stock assessment fishing mortality estimates, here
 used as model inputs through time.
+<<<<<<< HEAD
 
 Let's incorporate this time-varying fishing into the model. Since the time series goes back further than the years for which the time-averaged model was calibrated, we will set the initial value to an unfished steady state. This initial state turns out to be very important for how well the time series fits and more advanced statistical studies estmate the initial fishing moratlity rate.
 
+=======
+
+Let's incorporate this time-varying fishing into the model.
+
+>>>>>>> 568828e7cdcc8fea4c0c5359bad67916c29cce46
 ```{r,code_folding=TRUE}
 # read in stored fishing mortality (here called effort) time series
 effort <- readRDS("data-for-steady-to-time/effortTime.RDS")
@@ -334,8 +365,20 @@ plotlyBiomass(simt)
 ```
 
 Here, we are interested in examining the changes along side
+<<<<<<< HEAD
 observations. Let's read in the observed landings for the North Sea and
 add these to our plot.
+=======
+observations. Let's read in some observed landings for the North Sea and
+add these to our plot.
+
+```{r}
+#read in observed yield values (again need to update these data from ICES)
+obsy <- as.matrix(read.csv("data-for-steady-to-time/catchesMat.csv")[1:73,])
+rownames(obsy)<-obsy[,1] 
+obsy <-reshape2::melt(obsy[,-1])
+names(obsy)<-c("time","sp","value")
+>>>>>>> 568828e7cdcc8fea4c0c5359bad67916c29cce46
 
 ```{r,warning=FALSE}
 source("calibration_functions.R")
@@ -350,6 +393,7 @@ geom_point(data=yields_obs,aes(x = Year, y = (Yield), colour = Species),size=0.1
 
 ```
 
+<<<<<<< HEAD
 Currently, for some species we can see the modeled yields are not near the data time series, but others look broadly ok. Also the stocks seem to collapse earlier in the model than the data. Remember we arbitrarily set the density dependence for all species to 0.9.
 
 
@@ -363,8 +407,67 @@ geom_point(data=yields_obs,aes(x = Year, y = (Yield), colour = Species),size=0.1
 
 
 ```
+=======
+Currently, the modeled yields are nowhere near the data time series.
+Ideally we would like the lines to pass through the cloud of points for
+each species....
 
+One issue could be that the erepro values we just re-calibrated the
+model make the species much more reactive to fishing. Let's examine how
+sensitive the time series (and their visual agreement to data look when
+we change our assumptions about eRepro, and possibly Rmax).
 
+Given we have much more data now than in the time averaged calibration
+we can estimate more parameters. Because erepro influences how stocks
+respond to fishing this is an appropriate one to include, but only when
+Rmax is also being re-calibrated.
+
+Other parameters could be estimated here, such as the kappa and r_pp to
+control the background resource spectrum or initial and maximum fishing
+mortality parameters if we used a logistic function to capture changes
+in fishing mortality rates through time (Svuwalski et al. 2017). Also
+Bayesian parameter uncertainty work has done this with Rmax (Spence et
+al 2016) and time-varying Fs (Spence et al 2021) using this North Sea
+model.
+
+Optimisation is computationally intensive so we will run the below
+setting up multiple computer cores and using *optimParallel*. The
+function *getErrorTime* is user defined and it runs the model and
+calculates the sum of squared errors between the observed and modeled
+catches for all species' time series. If you want to see how to write
+the error function it is in the file "calibration_functions.R" and can
+be examined here:
+
+We will pass this function to *fastOptim()* to estimate the lowest sum
+of squared errors between the observed and modelled catches for all
+species' time series. If you wat to see how to write the error function
+it is in the file "calibration_fuctions.R" called "getErrorTime()".
+
+Now, to run in parallel, the first set up a cluster of multiple computer
+cores to run model in parallel. I have commented this out as it takes a
+looooong time to run (so, depending on your computer you might want to
+do it while you take a break). For this example, we will just read in
+our previously saved the results.
+
+```{r,code_folding=TRUE,eval=F}
+library(parallel)
+library(pbapply)
+library(lhs)
+
+num_species<-12
+
+params<-simt@params
+>>>>>>> 568828e7cdcc8fea4c0c5359bad67916c29cce46
+
+set.seed(1234)
+# num runs
+num_iter=10
+X <- data.frame(randomLHS(num_iter, 4))
+# rows are iterations, columns are specific parameters
+colnames(X)<-(1:4)
+#if the first column is Rmax and you want it to be bound by say, 0.25 and 0.5, as above you do this:
+
+<<<<<<< HEAD
 What would the reproduction parameters need to be in order to fit the overall time series data better?
 
 One issue could be that the erepro values we just re-calibrated the model make the species much more reactive to fishing. Let's examine how
@@ -473,12 +576,40 @@ geom_point(data=filter(yields_obs,Species=="Cod"),aes(x = Year, y = (Yield), col
 ```
 
 ```
+=======
+X[,1] <- X[,1]*max(log10(species_params(params)$R_max)) 
+X[,2] <- X[,2]
+X[,3] <-X[,3]-mean(species_params(params)$erepro)
+X[,4] <-X[,4]-X[,4]
+
+summary(X)
+
+# we could do the apply function in parallel so it's faster, here just using as it has a nice progress bar (so you know how long you can go and take a break)
+
+library(pbapply)
+
+X$error<- pbapply(X,1,getErrorTime,params,dat=obsy,effort)
+# find param set with the lowest error
+findmin<-which(X$error==min(X$error,na.rm=T))
+X[findmin,]
+
+saveRDS(X,"lhs_paramspace.RDS")
+```
+
+```
+
+NOTE: these are not actually the most recent optimisation runs - using
+here just to show what the blog would show
+>>>>>>> 568828e7cdcc8fea4c0c5359bad67916c29cce46
 
 NOTE: these are not actually the most recent optimisation runs - using
 here just to show what the blog would show
 
+<<<<<<< HEAD
 Now let's plug these back in and take a look at the plots....
 
+=======
+>>>>>>> 568828e7cdcc8fea4c0c5359bad67916c29cce46
 ```{r,code_folding=TRUE}
 
 #put these new vals into species_params and go back to the top of this page to re-check the calibration 
