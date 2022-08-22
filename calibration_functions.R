@@ -2,17 +2,23 @@
 ########## Calculate error function for time series calibration 
 ##########------------------------------------------------------
 
-getErrorTime <- function(vary,params,effort,dat,env=state,tol = 0.1) {
+getErrorTime <- function(vary,params,effort,dat,sumsquares=T,variable="reproduction_level") {
   
-  params <- setBevertonHolt(params, reproduction_level = vary[1:12])
+  if (variable=="erepro"){
+  params <- setBevertonHolt(params, erepro = vary)
+  }
+  if (variable=="R_max"){
+    params <- setBevertonHolt(params, R_max = 10^vary)
+  }
+  if (variable=="reproduction_level"){
+    params <- setBevertonHolt(params, reproduction_level = vary)
+  }
   
-  # run to steady state with the new params and fishing level 
-
-  params_steady<- projectToSteady(params,effort = effort[1,],return_sim = F)
+  params<-projectToSteady(params,effort=effort[1,])
   
   #run time-varying effort model though time from the new initial steady state
 
-  simt <- project(params_steady, effort = effort)
+  simt <- project(params, effort = effort)
 
   # get biomass through time
   
@@ -40,19 +46,24 @@ getErrorTime <- function(vary,params,effort,dat,env=state,tol = 0.1) {
   
   # sum of squared errors, could use  log-scale of predictions and data (could change this or use other error or likelihood options)
   
-  error <- sum((log(pred) - log(obs))^2,na.rm=T)
+  sumsq <- sum((log(pred) - log(obs))^2,na.rm=T)
+  
+  # total relative error
+  tre= sum(1-pred/obs,na.rm=T)
   
   # can use a strong penalty on the error to ensure we reach a minimum of 10% of the data (biomass or catch) for each species
   # if(any(pred < 0.1*dat)) discrep <- discrep + 1e10
+  
+  if (sumsquares==T) error<-sumsq
+  if (sumsquares==F) error<-tre
   
   return(error)
   
 }
 
-#vary<-c(log10(simt@params@species_params$R_max),simt@params@species_params$erepro,log10(5e11),4)
-
+#vary<-rep(0.3,12)
 # ## test it
-# err<-getErrorTime(vary = vary, params = params, dat = obsy)
+#err<-getErrorTime(vary, params = params2, effort=effort,yields_obs)
 # 
 # 
 # err
@@ -66,13 +77,21 @@ getErrorTime <- function(vary,params,effort,dat,env=state,tol = 0.1) {
 
 
 
-# function for calibration of Rmax
-fastOptim <- function(params,effort,dat)
+# function for calibration of reproduction parameters
+fastOptim <- function(params,effort,dat,variable,lower_val,upper_val)
 {
   # create set of params for the optimisation process
   params_optim <- params
-
-  vary <-  getReproductionLevel(params_optim) # variable to explore
+  
+  if (variable=="erepro"){
+  vary <-  species_params(params_optim)$erepro # variable to explore
+  }
+  if (variable=="R_max"){
+    vary <-  log10(species_params(params_optim)$R_max) # variable to explore
+  }
+  if (variable=="reproduction_level"){
+    vary <-  getReproductionLevel(params_optim) # variable to explore
+  }
   
   # set up workers
   noCores <- parallel::detectCores() - 1 # keep some spare core
@@ -84,12 +103,22 @@ fastOptim <- function(params,effort,dat)
     library(optimParallel)
   })
 
-  optim_result <- optimParallel::optimParallel(par=vary,getErrorTime,params=params_optim, effort =effort,dat = dat, method   ="L-BFGS-B", lower=c(rep(0.5,dim(params_optim@species_params)[1])), upper= c(rep(0.9999999,dim(params_optim@species_params)[1])),
-                                               parallel=list(loginfo=TRUE, forward=TRUE))
+  optim_result <- optimParallel::optimParallel(par=vary,getErrorTime,params=params_optim, effort =effort,dat = dat, method   ="L-BFGS-B", lower=c(rep(lower_val,dim(params_optim@species_params)[1])), upper= c(rep(upper_val,dim(params_optim@species_params)[1])),
+                                           parallel=list(loginfo=TRUE, forward=TRUE))
   stopCluster(cl)
   
-  params_optim <- setBevertonHolt(params_optim, reproduction_level = optim_result$par)
-  params_optim<- projectToSteady(paramsRepro, effort = effort[1,])
+  
+  if (variable=="erepro"){
+    params_optim <- setBevertonHolt(params_optim, erepro = optim_result$par)
+     }
+  if (variable=="R_max"){
+    params_optim <- setBevertonHolt(params_optim, R_max = 10^optim_result$par)
+     }
+  if (variable=="reproduction_level"){
+    params_optim <- setBevertonHolt(params_optim, reproduction_level = optim_result$par)
+     }
+  
+  params_optim<- projectToSteady(params_optim, effort = effort[1,])
   sim_optim<- project(params_optim , effort = effort)
   return(sim_optim)
 }
