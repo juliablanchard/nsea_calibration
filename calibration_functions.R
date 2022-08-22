@@ -4,33 +4,18 @@
 
 getErrorTime <- function(vary,params,effort,dat,env=state,tol = 0.1) {
   
-<<<<<<< HEAD
-  species_params(params)$R_max<-10^(vary[1:dim(species_params)[1]])
-  species_params(params)$erepro<-vary[(dim(species_params)[1]+1):(dim(species_params)[1]*2)]
-=======
-  params@species_params$R_max[1:dim(species_params(params))[1]]<-10^(vary[1]*species_params(params)$w_inf^vary[2])
-  params@species_params$erepro[1:dim(species_params(params))[1]]<-vary[3]*species_params(params)$w_inf^vary[4]
-  #params@resource_params$kappa<-10^vary[25]
-  #params@resource_params$r_pp<-vary[26]
->>>>>>> 568828e7cdcc8fea4c0c5359bad67916c29cce46
+  params <- setBevertonHolt(params, reproduction_level = vary[1:12])
   
-  # params <- setParams(params)
-  # run to steady state and update params
-  # env$params<- projectToSteady(env$params, distance_func = distanceSSLogN,
-  #                 tol = tol, t_max = 200,return_sim = F)
+  # run to steady state with the new params and fishing level 
+
+  params_steady<- projectToSteady(params,effort = effort[1,],return_sim = F)
   
-  #params_steady<- projectToSteady(params, distance_func = distanceSSLogN,
-  #                               tol = tol, t_max = 200,return_sim = F)
-  
-  #run time-varying effort model tthough time with new erepro
-  
-<<<<<<< HEAD
-  simt <- project(params, effort = effort)
-=======
-  simt <- project(params, effort = effort,initial_n =  params@initial_n, initial_n_pp = params@initial_n_pp)
->>>>>>> 568828e7cdcc8fea4c0c5359bad67916c29cce46
-  
+  #run time-varying effort model though time from the new initial steady state
+
+  simt <- project(params_steady, effort = effort)
+
   # get biomass through time
+  
   biomass <- sweep(simt@n, 3, simt@params@w * simt@params@dw, "*")
   
   #get yield through time from model:
@@ -44,7 +29,8 @@ getErrorTime <- function(vary,params,effort,dat,env=state,tol = 0.1) {
   
   yield_frame <- melt(yield_species)
   
-  # leave out spin up    
+  # leave out spin up 
+  
   y<-yield_frame[yield_frame$time >= 1947,]
   
   # disregard zeroes - these were NAs only filled in to run the model   
@@ -76,56 +62,18 @@ getErrorTime <- function(vary,params,effort,dat,env=state,tol = 0.1) {
 ##########------------------------------------------------------
 
 
-plotFittedTime<-function(sim=simt,obsy=obsy,allSpecies=T,plotSpecies=NULL,startyr=1947,endyr=2019){
-  
-  # output modelled yields and reshape for plotting - dont know why built-in getYield function doesn't woprk
-  
-   y <- getYield(simt)
-   y <- reshape2::melt(y)
-  
-  
-  # plot these
-  
-  if (allSpecies ==T) { 
-    p<-ggplot(y) + geom_line(data=y, aes(x = time, y = (value), 
-                                         colour = sp)) +
-      geom_point(data=obsy,aes(x = time, y = (value), 
-                               colour = sp),size=0.1) +
-      facet_wrap(~sp,scales="free_y") +
-      scale_y_continuous(name = "yield [g/year]")  +
-      scale_colour_manual(values = sim@params@linecolour) +
-      xlim(startyr, endyr)
-  }
-  
-  # look only at  one species at a time and examine on linear 
-  if (allSpecies ==F){
-    p<-ggplot(y) + geom_line(data=filter(y,sp==plotSpecies), aes(x = time, y = value,colour = sp)) +
-      geom_point(data=filter(obsy,sp=="Cod"),aes(x = time, y = value, 
-                                                 colour = sp),size=0.6) +
-      #facet_wrap(~sp) +
-      scale_y_continuous(name = "Yield [g/year]")  +
-      scale_colour_manual(values = sim@params@linecolour) +
-      xlim(startyr, endyr)
-  }
-  
-  return(p)
-}
-
 ### Helpful functions
 
 
 
 # function for calibration of Rmax
-fastOptim <- function(params)
+fastOptim <- function(params,effort,dat)
 {
   # create set of params for the optimisation process
   params_optim <- params
-<<<<<<< HEAD
-  vary <-  c(log10(params_optim@species_params$R_max)) # variable to explore
-=======
-  vary <-  c(log10(params_optim@species_params$R_max),params2@species_params$erepro) # variable to explore
-  params_optim<-setParams(params_optim)
->>>>>>> 568828e7cdcc8fea4c0c5359bad67916c29cce46
+
+  vary <-  getReproductionLevel(params_optim) # variable to explore
+  
   # set up workers
   noCores <- parallel::detectCores() - 1 # keep some spare core
   cl <- parallel::makeCluster(noCores, setup_timeout = 0.5)
@@ -135,18 +83,14 @@ fastOptim <- function(params)
     library(mizerExperimental)
     library(optimParallel)
   })
-<<<<<<< HEAD
-  optim_result <- optimParallel::optimParallel(par=vary,getErrorTime,params=params_optim, dat = yields_obs, method   ="L-BFGS-B", lower=c(rep(3,dim(params_optim@species_params)[1])), upper= c(rep(15,dim(params_optim@species_params)[1])),
+
+  optim_result <- optimParallel::optimParallel(par=vary,getErrorTime,params=params_optim, effort =effort,dat = dat, method   ="L-BFGS-B", lower=c(rep(0.5,dim(params_optim@species_params)[1])), upper= c(rep(0.9999999,dim(params_optim@species_params)[1])),
                                                parallel=list(loginfo=TRUE, forward=TRUE))
   stopCluster(cl)
-  species_params(params_optim)$R_max <- 10^optim_result$par 
-=======
-  optim_result <- optimParallel::optimParallel(par=vary,getErrorTime,params=params_optim, dat = params_optim@species_params$biomass_observed, data_type = "SSB", method   ="L-BFGS-B", lower=c(rep(3,dim(params_optim@species_params)[1])), upper= c(rep(15,dim(params_optim@species_params)[1])),
-                                               parallel=list(loginfo=TRUE, forward=TRUE))
-  stopCluster(cl)
-  params_optim@species_params$R_max <- 10^optim_result$par 
->>>>>>> 568828e7cdcc8fea4c0c5359bad67916c29cce46
-  sim_optim <- project(params_optim, t_max = 2000)
+  
+  params_optim <- setBevertonHolt(params_optim, reproduction_level = optim_result$par)
+  params_optim<- projectToSteady(paramsRepro, effort = effort[1,])
+  sim_optim<- project(params_optim , effort = effort)
   return(sim_optim)
 }
 
