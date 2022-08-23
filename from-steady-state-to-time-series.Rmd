@@ -145,6 +145,7 @@ see if the size spectra look OK:
 
 ```{r,code_folding=TRUE}
 sim <- project(params,effort=initial_effort(params),t_max = 10)
+<<<<<<< HEAD
 plotCalibration(sim)
 ```
 
@@ -152,6 +153,39 @@ The diagnostic plots look reasonable and to compete this step we could fully che
 plots in mizerExperimental. The course notes here go through many helpful steps needed to tune, evaluate and check this steady state.
 
 One of the key steps prior to modelling change through time involves checking and tuning each species' sensitivity to fishing, which is determined by the reproduction parameters (also see here: https://blog.mizer.sizespectrum.org/posts/2021-08-03-density-dependence-in-reproduction/).
+=======
+plotlySpectra(sim, power = 2, total = TRUE)
+plot(sim)
+```
+
+The diagnostic plots look reasonable as do the growth curves below, in
+comparison with those based purely on the empirical von Bertlanffy
+parameters. We would of course expect some variation here, with the
+modelling being driven by mechanistic processes involved in food
+dependent growth and size-at-age data typically highly variable.
+Ultimately, we need to re-examine these later with data as well.
+
+```{r}
+plotGrowthCurves(sim, species_panel = TRUE)
+```
+
+We also want to check the diets look OK. For this we can use a handy
+plot in 'mizerHowTo', which is a package that has more in depth
+tutorials for you to play with some day, particularly for examining
+these diagnostics further and for hand-tuning, using shiny apps.
+
+```{r}
+plotDiet2(sim)
+```
+
+The initial "effort" values used in the previous version of this model
+are actually fishing mortality rates from single species stock
+assessments which are set by assuming catchability of 1. We could use
+this model as a starting point to estimate the levels of fishing
+mortality rates that produce the catches through time (as in
+[this](https://www.pnas.org/doi/abs/10.1073/pnas.1612722114) paper).
+More on that later.
+>>>>>>> f49db136e02a9ed823394d21f9a06466ce03f371
 
 The sensitivity to fishing is set by the *reproduction_level* and this parameter and tuning process has a big effect on how species collapse and/or recover through time. See more [here - week 3 course]. 
 
@@ -165,18 +199,45 @@ reproduction_level
 ```
 
 And we can double check to see what the Rmax and erepro values, for each
+<<<<<<< HEAD
 species. 
+=======
+species:
+>>>>>>> f49db136e02a9ed823394d21f9a06466ce03f371
 
 ```{r,code_folding=TRUE}
 species_params(params)[, c("erepro", "R_max")]
 ```
 
+<<<<<<< HEAD
 There seems to very high sensitivity to fishing (low erepro) and low levels density dependence (little or no cap on the reproductive output at high levels of adult biomass, indicated by very high R_max values or *Inf*) for some species. Both of these parameters combined affect reproduction_level [see here for further explanation].
+=======
+There seems to be a small amount of density dependence for some species
+but not others.
+
+Additional unaccounted for density dependence could include habitat, are
+extra sources of mortality or reproductive success. These parameters
+along with erepro, the reproductive efficiencies, affect how species
+collapse (and recover) under changes in fishing through time.
+
+We may wish to not include any additional density dependence, or we may
+wish to find out, what the best estimates of these values are, when the
+model is fit to time series data. This is what we will do below, this
+time using catch data through time, and additonally estimating two
+parameters associated with the trajectory of fishing mortality through
+time. In a later post I will show how we could use effort information if
+that is available or catch only. For now, this suits our purpose.
+
+First, we need to assume some level of density dependence to get
+started. Arbritralily I will choose 0.9 to get some values, and we can
+also have a look at how this appears in the stock-recruitment function:
+>>>>>>> f49db136e02a9ed823394d21f9a06466ce03f371
 
 In a previous blog Gustav showed how we can tune the sensitivity to fishing using the reproduction_level alone. The advantage is that tuning this parameter does not affect the steady state, whereas tuning R_max and/or erepro, through optimisation, may not guarantee a steady state is reached.
 
 Tuning sensitivity to fishing  involves adjusting the reproduction_level examining yield curves (see course notes here) at equilibrium. Choices have to be made for each species, usually based on single-species theory or could be set based on prior ecological knowledge about the resilience of the species to fishing.  
 
+<<<<<<< HEAD
 Yield curves would look dome-shaped to be consistent with theory with values of Fmsy consistent with the Fmsy that would cause collaspe for each species [show plot here]
 
 But how do we know what the reproduction_level and sensitivity to fishing should be in real ecosystems, when so may processes affect this in reality?
@@ -187,6 +248,30 @@ An additional approach could be to confront the model with time series data of c
 
 We can force the model through time with changes in fishing
 mortality and determine whether modeled catches decline in a way that is consistent with observed catches and/or our expectations from the yield curves.
+=======
+```
+
+Ideally, using the level of density dependence we think should be
+correct the yield curves would look dome-shaped and consistent with
+theory. But how do we know what level of density dependence to set in
+real ecosystems?
+
+An alternative approach could be to confront the model with time series
+data of catches, and to estimate the reproduction parameters that way.
+
+# Forcing the model through time
+
+Next, we will force the model through time with changes in fishing
+mortality. These are fairly recent ICES stock assessment fishing
+mortality estimates, here used as model inputs through time.
+
+Let's incorporate this time-varying fishing into the model. Since the
+time series goes back further than the years for which the time-averaged
+model was calibrated, we will set the initial value to an unfished
+steady state. This initial state turns out to be very important for how
+well the time series fits and more advanced statistical studies estmate
+the initial fishing mortality rate.
+>>>>>>> f49db136e02a9ed823394d21f9a06466ce03f371
 
 To do this we need to incorporate time-varying fishing into the model. For the North Sea we can use ICES catch data and fishing mortality rates from stock assessments to examine this problem. We have can use fishing mortality rates directly in mizer by  assuming F = Q*E and setting catchability to 1. Since the
 time series goes back further than the years for which the time-averaged
@@ -197,14 +282,24 @@ to use as initial values for our simulations.
 # read in stored fishing mortality (here called effort) time series
 effort <- readRDS("data-for-steady-to-time/effortTime.RDS")
 # lets start the model off with the level of fishing using the first year of the input values
+<<<<<<< HEAD
 params2<- projectToSteady(params, effort = effort[1,],t_max = 200)
+=======
+params2<- projectToSteady(params2, effort = effort[1,],t_max = 200)
+>>>>>>> f49db136e02a9ed823394d21f9a06466ce03f371
 
 simt<- project(params, effort = effort)
 plotlyYield(simt)
 plotlyBiomass(simt)
 ```
 
+<<<<<<< HEAD
 We can then read in and add the North Sea catch data to our plot.
+=======
+Here, we are interested in examining the changes along side
+observations. Let's read in the observed landings for the North Sea and
+add these to our plot.
+>>>>>>> f49db136e02a9ed823394d21f9a06466ce03f371
 
 ```{r,warning=FALSE}
 yields_obs <-readRDS("yields_time.RDS")
@@ -215,6 +310,7 @@ geom_point(data=yields_obs,aes(x = Year, y = (Yield), colour = Species),size=0.1
 ```
 
 Currently, for some species we can see the modeled yields are not near
+<<<<<<< HEAD
 the data time series, but others look sort of ok. The stocks seem
 to collapse earlier in the model than the data. Remember we we did not set the sensitivity to fishing yet at steady state.
 
@@ -223,15 +319,46 @@ to collapse earlier in the model than the data. Remember we we did not set the s
 
 What would the reproduction parameters need to be in order to fit the
 overall time series data better?
+=======
+the data time series, but others look broadly ok. Also the stocks seem
+to collapse earlier in the model than the data. Remember we arbitrarily
+set the density dependence for all species to 0.9.
+
+If we look at the parameters without density dependence we can see
+stocks collapsed even earlier.
+>>>>>>> f49db136e02a9ed823394d21f9a06466ce03f371
 
 One issue could be that the *erepro* values we derived for the steady state make the species much more reactive to fishing. Let's examine how
 sensitive the time series (and their visual agreement to data) look when we change our assumptions about *reproduction_level*
 directly for a species.
 
+<<<<<<< HEAD
 ```{r}
 params2 <- setBevertonHolt(params2, reproduction_level = c("Cod" = 0.9))
 params2<- projectToSteady(params2, effort = effort[1,])
 simt2<- project(paramsRepro , effort = effort)
+=======
+
+```
+
+# Using the time series data to estimate reproduction parameters
+
+What would the reproduction parameters need to be in order to fit the
+overall time series data better?
+
+One issue could be that the erepro values we just re-calibrated the
+model make the species much more reactive to fishing. Let's examine how
+sensitive the time series (and their visual agreement to data look when
+we change our assumptions about eRepro, and possibly Rmax).
+
+First let's just see what happens if we reset the reproduction level
+directly for a species.
+
+```{r}
+paramsRepro <- setBevertonHolt(params2, reproduction_level = c("Cod" = 0.9))
+paramsRepro<- projectToSteady(paramsRepro, effort = effort[1,])
+simt4<- project(paramsRepro , effort = effort)
+>>>>>>> f49db136e02a9ed823394d21f9a06466ce03f371
 
 plotYield(simt2,species="Cod") +    facet_wrap(~Species,scales="free_y")+
 geom_point(data=filter(yields_obs,Species=="Cod"),aes(x = Year, y = (Yield), colour = Species),size=0.1)
@@ -243,6 +370,7 @@ effect on when the stocks start collapsing, as expected. And having the
 values low doesn't seem consistent with the data.
 
 Given we have much more data now than in the time-averaged calibration
+<<<<<<< HEAD
 we can estimate more parameters. While more advanced statistical approaches exist to do this (here and here) we will start simpler. 
 1) We start with a function the describe how the model catches will be compared with the observations - an error or objective function.The function *getErrorTime* is the function we can used to estimate the error with catches through time. 
 
@@ -258,6 +386,34 @@ Because running so many iterations of the model is computationally
 intensive so we can run the below using multiple computer cores and using *parallel*. 
 
 
+=======
+we can estimate more parameters. Because erepro influences how stocks
+respond to fishing this is an appropriate one to include, but only when
+Rmax is also being re-calibrated.
+
+Other parameters could be estimated here, such as the kappa and r_pp to
+control the background resource spectrum or initial and maximum fishing
+mortality parameters. Bayesian parameter uncertainty work has done this
+with Rmax (Spence et al. 2016) and time-varying Fs (Spence et al 2021)
+using this North Sea model. The first step of those analyses involved
+reducing the sampling space and is called "history matching". This
+allows us to identify parameters that are close and could be used for
+further Bayesian or optimisation routines. We start with a range of
+parameter values and set up a "latin hypercube" sampling scheme to
+ensure a good spread of these. Then we can run these values very quickly
+using a package called *pbapply*.
+
+Because running so many iterations of the model is computationally
+intensive so we will run the below setting up multiple computer cores
+and using *parallel*. The function *getErrorTime* is user defined
+function we want to minmise the error. The runs the model and calculates
+the sum of squared errors between the observed and modeled catches for
+all species' time series.
+
+We can alternatively do this with latin hypercube sampling and pbapply
+,which has a nice progress bar,
+
+>>>>>>> f49db136e02a9ed823394d21f9a06466ce03f371
 ```{r,code_folding=TRUE,eval=F}
 # set up workers
   noCores <- parallel::detectCores() - 1 # keep some spare core
@@ -345,10 +501,77 @@ The error hasn't really reduced that much through the parameter space
 sampling or optimisation of reproduction_level and the plots do not seem
 remarkably different, though improved.
 
+<<<<<<< HEAD
 [SHOW HOW THIS COMPARES TO R_max OPTIMISATION?]
 
 # Summary
 
+-   After arriving at a steady state that fit the time-averaged catch
+    data pretty well (using matchYields), we needed to set the
+    sensitivity to fishing via the level of density dependence in our
+    model. Initially we arbitrarily chose a high level- 0.9, but this is
+    an important parameter in terms of understanding how stocks collapse
+    and recover to fishing and is likely also to be species-specific.
+
+-   We confronted the model with time-series of fishing mortalities and
+    catch data. From this we saw that lower values of
+    *reproduction_level* resulted in stock collapse earlier in the time
+    series.
+
+-   We explored a couple of different approaches to simultaneously
+    estimate the reproduction_level for all species in the model. The
+    best parameter set given the data revealed very high levels of
+    density dependence for all species (except N.pout, Herring, and
+    Gurnard).
+
+-   Neither of the estimation methods revealed a pattern in the level of
+    density dependence with weight at infinity. It would be interesting
+    to know whether or not the modeled catches fit the data better using
+    our previous *Rmax* estimation approach.
+
+-   While we did not explore it, the modeled catches are very sensitive
+    to the initial fishing mortality rates. My next exploration aims to
+    investigate whether we draw similar conclusins when we do not use
+    inputs from single-species stock assessments.
+
+```{r}
+rl<-data.frame(rl=c(getReproductionLevel(params_lhs), getReproductionLevel(params_optim)),
+method=c(rep("lhs",12),rep("optim",12)),
+winf=rep(species_params(params_lhs)$w_inf,2))
+
+=======
+Let's compare this with the more widely used approach of estimating
+Rmax, keeping the tuned erepro and reproduction_level values fixed. This
+wll change the steady state so we need to re-calculate it.
+
+```{r,code_folding=TRUE,eval=F}
+sim_optim_Rmax<-fastOptim(params=params_lhs,effort=effort,dat=yields_obs,variable = "R_max",lower_val = 1,upper_val = 6)
+
+# compare the error to the time-average steady state version
+optim_error_Rmax<-getErrorTime(species_params(sim_optim_Rmax@params)$R_max, sim_optim_Rmax@params,effort, yields_obs,sumsquares = F)
+
+original<-getErrorTime(getReproductionLevel(params2), params2,effort, yields_obs,sumsquares = F)
+```
+
+Then plot it again.
+
+```{r,code_folding=TRUE,eval=F}
+params_optim_Rmax<-sim_optim_Rmax@params
+params_optim_Rmax<- projectToSteady(params_optim_Rmax, effort = effort[1,])
+simt_optim_Rmax<- project(params_optim_Rmax, effort = effort)
+
+plotYield(simt_optim_Rmax) +  facet_wrap(~Species,scales = "free") +
+geom_point(data=filter(yields_obs),aes(x = Year, y = (Yield), colour = Species),size=0.1)
+```
+>>>>>>> f49db136e02a9ed823394d21f9a06466ce03f371
+
+ggplot(rl,aes(x=log10(winf),y=rl,col=method)) + geom_point() 
+```
+
+#### Acknoweldgements
+
+<<<<<<< HEAD
+=======
 -   After arriving at a steady state that fit the time-averaged catch
     data pretty well (using matchYields), we needed to set the
     sensitivity to fishing via the level of density dependence in our
@@ -388,4 +611,5 @@ ggplot(rl,aes(x=log10(winf),y=rl,col=method)) + geom_point()
 
 #### Acknoweldgements
 
+>>>>>>> f49db136e02a9ed823394d21f9a06466ce03f371
 Thank you to Gustav Delius and Asta Audzijonyte for the push to write this blog and the stimulating discussions on this topic.
