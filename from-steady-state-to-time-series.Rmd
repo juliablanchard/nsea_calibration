@@ -445,5 +445,5 @@ erepros set to values in jacobsen?]
 
 #### Acknowledgements
 
-Thank you to Gustav Delius and Asta Audzijonyte for the push to write
-this blog and the stimulating discussions on this topic.
+Thank you Gustav Delius and Asta Audzijonyte for the push to write
+this blog and the stimulating discussions on this topic. Thank you Romain Forestier for help coding and implementing functions into the mizerHowTo package.
