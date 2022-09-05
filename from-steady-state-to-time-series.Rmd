@@ -41,7 +41,7 @@ in the [mizerExperimental](https://sizespectrum.org/mizerExperimental/)
 and mizerHowTo packages. Therefore we will always want to make sure we
 are loading the latest version of the package with
 
-```{r}
+```{r,echo=FALSE}
 #remotes::install_github("sizespectrum/mizerExperimental")
 #remotes::install_github("sizespectrum/mizerMR")
 #remotes::install_github("sizespectrum/mizerHowTo")
@@ -101,6 +101,7 @@ gear_params<-data.frame(species = species_params$species,
 
 params <- newMultispeciesParams(species_params = species_params,gear_params=gear_params,inter,initial_effort = species_params$catchability,max_w=1e6) # inter comes with loading "mizer")
 species_params(params)$gear<-species_params(params)$species
+species_params(params)$biomass_cutoff <- species_params(params)$w_mat
 params <- steady(params)
 plotlySpectra(params, power = 2)
 ```
@@ -114,23 +115,22 @@ gear_params(params)
 ```
 
 This shows there is a steady state with coexistence for all species,
-reasonable feeding level and size spectrum. How well do the yields match
-the time-averaged observations?
+reasonable feeding level and size spectrum. How well do the biomasses match the time-averaged observations (here obtained from stock assessments)?
 
-Using the handy function 'calibrateYield' scales the system (background
+Using the handy function 'calibrateBiomass' scales the system (background
 resource and other linked parameters) to get the total biomass in the
 model to match up with the total observed biomass of all 12 species.
-Then 'matchYield' calculates the scaling needed for each of the species'
+Then 'matchBiomass' calculates the scaling needed for each of the species'
 yields to match up to their observed ones. This part is a bit of an
 iterative process: match yield, calculate steady steady, re-check match
 to yield and repeat until satisfactory.
 
-I repeated the below 3 times, which gives a total relative error of
-0.918.
+I repeated the below 8 times, which gives a total relative error of
+0.024.
 
 ```{r}
-params <- params %>% calibrateYield() %>%  matchYields() %>%  steady()
-plotYieldObservedVsModel(params,ratio=T)
+params <- params %>% calibrateBiomass() %>%  matchBiomasses() %>%  steady()
+plotBiomassObservedVsModel(params,ratio=T)
 ```
 
 Pretty good! Now let's check we are at steady state and have a look to
@@ -248,7 +248,7 @@ to use as initial values for our simulations.
 effort <- readRDS("data-for-steady-to-time/effortTime.RDS")
 # lets start the model off with the level of fishing using the first year of the input values
 
-params2<- projectToSteady(params, effort = effort[1,],t_max = 200)
+params<- projectToSteady(params, effort = effort[1,],t_max = 200)
 
 simt<- project(params, effort = effort)
 plotlyYield(simt)
