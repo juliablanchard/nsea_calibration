@@ -230,10 +230,16 @@ for(iSpecies in SpIdx)
 write.csv(catchesMat, file = "data/catchesMat.csv") # loading from csv won't work with below code due to losing "years" as rownames
 #time-averaged-catches.csv
 # averaged subset
-catchAvg <- catchesMat[which(rownames(catchesMat) == "2014"):which(rownames(catchesMat) == "2019"),]
+# Go back to using time average for 1985-995 to be consistent with biomass survey form that time period
+catchesMat<-read.csv("data/catchesMat.csv")[,-1]
+row.names(catchesMat)<-1947:2020
+catchAvg <- catchesMat[which(rownames(catchesMat) == "1985"):which(rownames(catchesMat) == "1995"),]
 catchAvg <- apply(catchAvg,2,mean,na.rm=T)
 catchAvg[is.nan(catchAvg)] <- NA
-catchAvg <- data.frame("species" = SpIdx, "Catch_1419_tonnes" = catchAvg,row.names = NULL)
+catchAvg <- data.frame("species" = SpIdx, "Catch_8595_tonnes" = catchAvg,row.names = NULL)
+# For Gurnard and Dab use previous values from 2014 paper
+catchAvg[catchAvg$species=="Dab",]$Catch_8595_tonnes<-4122.91
+catchAvg[catchAvg$species=="Gurnard",]$Catch_8595_tonnes<-14646.18
 
 write.csv(catchAvg, file = "data/time-averaged-catches.csv",row.names = F)
 

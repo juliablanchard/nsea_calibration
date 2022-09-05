@@ -43,7 +43,7 @@ are loading the latest version of the package with
 
 ```{r,echo=FALSE}
 #remotes::install_github("sizespectrum/mizerExperimental")
-#remotes::install_github("sizespectrum/mizerMR")
+#remotes::install_github("sizespectrum/mizerMR",force=TRUE)
 #remotes::install_github("sizespectrum/mizerHowTo")
 
 library(mizerExperimental)
@@ -60,10 +60,11 @@ source("calibration_functions.R") # mve to howTO
 ```
 
 The North Sea model parameters which includes time-averaged biomass and
-yield observations needed to carry out this example.
+yield observations needed to carry out this example. Except for sandeel, all of the biomasses (grams) are from survey data, corrected for catchability, and averaged over 1985-1995 for the whole area of the North Sea. For sandeel stock assessment spawner biomass was used. For catches discards are included, with the exception of Gurnard and Dab which, along with catchability values, are the same as in Blanchard et al. 2014.
 
 ```{r, code_folding=TRUE, layout="l-body-outset"}
 species_params <- readRDS("data-for-steady-to-time/ns_calib_param.RDS")
+
 ```
 
 # A recap on getting the steady state
@@ -97,11 +98,12 @@ gear_params<-data.frame(species = species_params$species,
                         19.1, 13.2, 35.3),
                l50 = c(8.1, 11.8, 12.2, 20.8, 17.0, 29.0, 25.8, 29.0, 17.0,
                        24.3, 22.9, 43.6),
-               catchability = rep(1,dim(species_params)[1]))
+               catchability = species_params$catchability)
 
-params <- newMultispeciesParams(species_params = species_params,gear_params=gear_params,inter,initial_effort = species_params$catchability,max_w=1e6) # inter comes with loading "mizer")
+params <- newMultispeciesParams(species_params = species_params,gear_params=gear_params,inter,initial_effort = 1,max_w=1e6) # inter comes with loading "mizer")
 species_params(params)$gear<-species_params(params)$species
-species_params(params)$biomass_cutoff <- species_params(params)$w_mat
+species_params(params)$biomass_cutoff <- 10
+species_params(params)["Sandeel",]$biomass_cutoff <- 4
 params <- steady(params)
 plotlySpectra(params, power = 2)
 ```
@@ -109,7 +111,7 @@ plotlySpectra(params, power = 2)
 We can project the new params object to steady state and then check it.
 
 ```{r,code_folding=TRUE}
-sim <- project(params,effort=initial_effort(params), t_max = 100)
+sim <- project(params,effort=1, t_max = 100)
 plot(sim)
 gear_params(params)
 ```
@@ -125,13 +127,42 @@ yields to match up to their observed ones. This part is a bit of an
 iterative process: match yield, calculate steady steady, re-check match
 to yield and repeat until satisfactory.
 
-I repeated the below 8 times, which gives a total relative error of
-0.024.
+I repeated the below 7 times, which gives a total relative error of
+0.018.
 
 ```{r}
 params <- params %>% calibrateBiomass() %>%  matchBiomasses() %>%  steady()
 plotBiomassObservedVsModel(params,ratio=T)
 ```
+
+Now let's check the time-averaged yields.
+
+```{r}
+plotYieldObservedVsModel(params,ratio=F)
+```
+The model is overestimating the yields, likely to do with how the catchability coefficients have been parameterised from stock assessment estimates of fishing mortality rates that capture all age ranges. Let's estimate the catchability based on these time averaged yields. We can do this by writing an "error function" that allows us to optimise (find the minimum value of the error) by adjusting the values of a parameter, in this case catchability.
+
+```{r}
+getErrorYield<-function (vary, params, data_type = "catch", tol = 0.1,timetorun = 10) 
+{
+    gear_params(params)$catchability <-vary     
+    params <-   projectToSteady(params, distance_func = distanceSSLogN, tol = tol, t_max = 200, return_sim = F)
+    sim <- project(params, effort = 1, t_max = timetorun, progress_bar = F)
+    output <- getYield(sim)[timetorun, ]
+    pred <- log(output)
+    dat <- log(species_params(params)$yield_observed)
+    discrep <- pred - dat
+    discrep <- (sum(discrep^2))
+    return(discrep)
+}
+```
+
+
+
+
+
+
+
 
 Pretty good! Now let's check we are at steady state and have a look to
 see if the size spectra look OK:
@@ -215,7 +246,7 @@ checking the yield curves for each species.
 ```{r}
 params<-setBevertonHolt(params,reproduction_level = 0.8)
 params<-steady(params,return_sim = F)
-plotYieldVsF(params,species="Sprat",F_max = 1)
+plotYieldVsF(params,species="Cod",F_max = 1.0)
 plotCalibration(sim,stage=2)
 ```
 
@@ -282,9 +313,9 @@ we change our assumptions about *reproduction_level* directly for a
 species.
 
 ```{r}
-params2 <- setBevertonHolt(params2, reproduction_level = c("Cod" = 0.9))
+params2 <- setBevertonHolt(params, reproduction_level = c("Cod" = 0.9))
 params2<- projectToSteady(params2, effort = effort[1,])
-simt2<- project(paramsRepro , effort = effort)
+simt2<- project(params2 , effort = effort)
 
 plotYield(simt2,species="Cod") +    facet_wrap(~Species,scales="free_y")+
 geom_point(data=filter(yields_obs,Species=="Cod"),aes(x = Year, y = (Yield), colour = Species),size=0.1)
