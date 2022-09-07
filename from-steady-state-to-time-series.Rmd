@@ -49,7 +49,7 @@ are loading the latest version of the package with
 library(mizerExperimental)
 library(mizerMR)
 library(tidyverse)
-library(mizerHowTo)
+#library(mizerHowTo)
 
 library(parallel)
 library(pbapply)
@@ -140,7 +140,7 @@ Now let's check the time-averaged yields.
 ```{r}
 plotYieldObservedVsModel(params,ratio=F)
 ```
-The model is overestimating the yields, likely to do with how the catchability coefficients have been parameterised from stock assessment estimates of fishing mortality rates that capture all age ranges. Let's estimate the catchability based on these time averaged yields. We can do this by writing an "error function" that allows us to optimise (find the minimum value of the error) by adjusting the values of a parameter, in this case catchability.
+The model is overestimating the yields, likely to do with how the catchability coefficients have been parameterised from stock assessment estimates of fishing mortality rates that capture all age ranges. Let's estimate the catchability based on these time averaged yields. We can do this by writing an "error function" that allows us to optimise (find the minimum value of the error) by adjusting the values of a parameter, in this case catchability. Later on, we will apply time series expressing changes in F (from stock assessments) relative to the initial catchability values.
 
 ```{r}
 getErrorYield<-function (vary, params, data_type = "catch", tol = 0.1,timetorun = 10) 
@@ -155,14 +155,65 @@ getErrorYield<-function (vary, params, data_type = "catch", tol = 0.1,timetorun 
     discrep <- (sum(discrep^2))
     return(discrep)
 }
+vary=gear_params(params)$catchability
+getErrorYield(vary,params)
+```
+
+Now we will use optimisation to help estimate the catchabilities for each species, that minimises the above overall error. Why I Use L-BFGS-B. lower and upper value
+
+```{r}
+# set up workers
+  noCores <- parallel::detectCores() - 1 # keep some spare core
+  cl <- parallel::makeCluster(noCores, setup_timeout = 0.5)
+  setDefaultCluster(cl = cl)
+  clusterExport(cl, varlist = "cl",envir=environment())
+  clusterEvalQ(cl, {
+    library(mizerExperimental)
+    library(optimParallel)
+  })
+  
+num_species<-12
+# num runs
+num_iter=1000
+# set the upper and lower bounds for each variable
+rect_vary<-cbind(rep(0.2,num_species),rep(1.5,num_species))
+set.seed(123)
+parameters_new <- data.frame(lhs(num_iter, rect_vary))
+names(parameters_new)<-row.names(species_params(params))
+
+parameters_new$error<-pbapply(parameters_new,1,getErrorYield,params,cl=cl)
+
+stopCluster(cl)
+#save error
+saveRDS(parameters_new,"lhs_paramspace.RDS")
+
+  
 ```
 
 
 
+Find param set with the lowest error.
 
+```{r,code_folding=TRUE,eval=F}
+findmin<-which(parameters_new$error==min(parameters_new$error,na.rm=T))
 
+result<-parameters_new[findmin,]
+```
 
+Plug it back into the model and compare the error values.
+```{r}
+gear_params(params)$catchability<-as.numeric(result[1:12])
+params2<-steady(params)
+plotYieldObservedVsModel(params2,ratio=F)
 
+```
+
+Recalibrate with match biomasses again, 
+```{r}
+params2 <- params2 %>% calibrateBiomass() %>%  matchBiomasses() %>%  steady()
+plotBiomassObservedVsModel(params2,ratio=T)
+plotYieldObservedVsModel(params2,ratio=F)
+```
 
 Pretty good! Now let's check we are at steady state and have a look to
 see if the size spectra look OK:
