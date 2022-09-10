@@ -52,12 +52,12 @@ library(parallel)
 library(pbapply)
 library(lhs)
 library(tgp)
-source("calibration_functions.R") # mve to howTO
+source("calibration_functions.R") # move to howTO
 
 ```
 
 The North Sea model parameters which includes time-averaged biomass and
-yield observations needed to carry out this example. Except for sandeel, all of the biomasses (grams) are from survey data, corrected for catchability, and averaged over 1985-1995 for the whole area of the North Sea. For sandeel stock assessment spawner biomass was used. For catches discards are included, with the exception of Gurnard and Dab which, along with catchability values, are the same as in Blanchard et al. 2014.
+yield observations needed to carry out this example. Except for sandeel, all of the biomasses (grams) are from survey data, corrected for catchability, and averaged over 1985-1995 for the whole area of the North Sea. For sandeel, stock assessment etsimates of spawner biomass was used. For catches, discards are included, with the exception of Gurnard and Dab which, along with catchability values, are the same as in Blanchard et al. 2014.
 
 ```{r, code_folding=TRUE, layout="l-body-outset"}
 species_params <- readRDS("data-for-steady-to-time/ns_calib_param.RDS")
@@ -137,15 +137,14 @@ Now let's check the time-averaged yields.
 ```{r}
 plotYieldObservedVsModel(params,ratio=F)
 ```
-The model is massively overestimating the yields, likely to do with how the catchability coefficients have been parameterised from stock assessment estimates of fishing mortality rates that capture all age ranges. Also, we have not yet set the sensitivity to fishing or density dependence in the model. Let's do that first and then come back to the observed yields.
+The model is massively overestimating the yields, likely to do with how the catchability coefficients have been parameterised from stock assessment estimates of fishing mortality rates that capture. Also, we have not yet set the sensitivity to fishing or density dependence in the model. Let's do that first and then come back to the observed yields.
 
 Let's also check we are at steady state and have a look to
 see if the size spectra look OK:
 
 ```{r,code_folding=TRUE}
 sim <- project(params,effort=initial_effort(params),t_max = 10)
-plotCalibration(sim,stage=1)
-
+plot(sim)
 ```
 
 The diagnostic plots look reasonable and to compete this step we would
@@ -361,7 +360,7 @@ num_species<-12
 # num runs
 num_iter=1000
 # set the upper and lower bounds for each variable
-
+# here we are looking at the parameter space below the current values, as the yields look too high from the model
 rect_vary<-cbind(vary*0.6,vary*0.9)
 
 set.seed(123)
@@ -375,13 +374,12 @@ return(parameters_new)
 stopCluster(cl)
 }
 #save error
-#parameters_new<-sample_params(vary=vary)
+parameters_new<-sample_params(vary=vary)
 saveRDS(parameters_new,"lhs_paramspace.RDS")
 
 ```
 
-  
-plot error
+We can take a look at how the overall  error changes as the catchability for all species are simultaneously changed.
 ```{r}
 error<-melt(parameters_new,id.vars ="error")
 ggplot(data=error,aes(x=value,y=error)) + geom_point() + facet_grid(.~variable)
@@ -390,7 +388,7 @@ ggplot(data=error,aes(x=value,y=error)) + geom_point() + facet_grid(.~variable)
   
  
 
-Find param set with the lowest error.
+We can then find the parameter set with the lowest error, and repeat as needed.
 
 ```{r,code_folding=TRUE,eval=F}
 findmin<-which(parameters_new$error==min(parameters_new$error,na.rm=T))
@@ -400,13 +398,22 @@ result<-parameters_new[findmin,]
 parameters_new<-sample_params(vary=unlist(result[1:12]))
 ```
 
-then check plot and quickly? optimize species at a time?
+Let's plug the estimates from our third try back into the model.
 
 ```{r}
 gear_params(params)$catchability<-unlist(result[1:12]) 
 params<-steady(params)
 plotYieldObservedVsModel(params)
 ```
+It's a bit of an improvement for yields. How will this affect our biomass fits?
+
+```{r}
+plotBiomassObservedVsModel(params)
+```
+
+An alternative approach to find these ballpark values is to optimize one species at a time (bit this does not guarantee a good fit because changing one species parameters affects the outputs of other species). But let's see how the different approaches compare.
+
+
 ```{r}
 species_result<-data.frame(species=species_params$species, catchability=rep(0,12),species_error=rep(0,12))
 
@@ -423,34 +430,30 @@ species_result[i,c(2:3)]<-out
 }
 ```
 
-Plug it back in to model
+Plug the single species estimates of catchability back into model.
 
 ```{r}
 gear_params(params)$catchability<-species_result[,2]
 params<-steady(params)
 plotYieldObservedVsModel(params)
+plotBiomassObservedVsModel(params)
 ```
 
-need to turn above into a function and enable the ranges to change - based on relative differences to most recent values run.
-or just run the fastOptim - which runs the model.
 
-# check biomass again
+This didn't really improve things. And both made the biomass fits worse.We can re-calibrate the biomass, now that we have new catchability parameters.
 
-
-Recalibrate with match biomasses again? 
 ```{r}
-params2 <- params2 %>% calibrateBiomass() %>%  matchBiomasses() %>%  steady()
-plotBiomassObservedVsModel(params2,ratio=T)
-plotYieldObservedVsModel(params2,ratio=F)
+params <- params %>% calibrateBiomass() %>%  matchBiomasses() %>%  steady()
+plotBiomassObservedVsModel(params,ratio=T)
+plotYieldObservedVsModel(params,ratio=F)
 
 ```
+Re-calibrating biomass puts us back at the beginning in terms of capturing the time-averaged yields well. More data would be advantageous here to help us learn about the scope of these parameters.
 
 
+# Using the time series data to estimate reproduction and catchability parameters
 
-
-# Using the time series data to estimate reproduction parameters
-
-What would the reproduction parameters need to be in order to fit the
+In addition to the catchabilities, we are uncertain about the reproduction_level values. What would the reproduction parameters need to be in order to fit the
 overall time series data better?
 
 One issue could be that the *erepro* values we derived for the steady
@@ -460,8 +463,8 @@ we change our assumptions about *reproduction_level* directly for a
 species.
 
 ```{r}
-# params2 <- setBevertonHolt(params, reproduction_level = c("Cod" = 0.9))
- params2<- projectToSteady(params2, effort = effort[1,])
+params2 <- setBevertonHolt(params, reproduction_level = 0.09)
+ params2<- steady(params2)
  simt2<- project(params2 , effort = effort)
 
  plotYield(simt2) +    facet_wrap(~Species,scales="free_y")+
@@ -504,7 +507,7 @@ using *parallel*.
 
 
 ```{r,code_folding=TRUE,eval=F}
-# set up workers
+sample_params2<-function(vary=c(as.numeric(getReproductionLevel(params2)),gear_params(params2)$catchability),species=NULL) { # set up workers
   noCores <- parallel::detectCores() - 1 # keep some spare core
   cl <- parallel::makeCluster(noCores, setup_timeout = 0.5)
   setDefaultCluster(cl = cl)
@@ -513,21 +516,30 @@ using *parallel*.
     library(mizerExperimental)
     library(optimParallel)
   })
+whichspecies<-which(gear_params(params)$species==species)
   
-num_species<-12
+num_species<-length(whichspecies)
 # num runs
-num_iter=1000
+num_iter=10000
 # set the upper and lower bounds for each variable
-rect_vary<-cbind(rep(0.5,num_species),rep(0.9999,num_species))
+ upper<-vary*1.1
+ lower<-vary*0.6
+ rect_vary<-cbind(lower,upper)
+#rect_vary<-cbind(rep(0.01,num_species*2),rep(0.9999,num_species*2))
 set.seed(123)
 parameters_new <- data.frame(lhs(num_iter, rect_vary))
-names(parameters_new)<-row.names(species_params(params))
+names(parameters_new)<-row.names(species_params(params))[whichspecies]
 
-parameters_new$error<-pbapply(parameters_new,1,getErrorTime,params2,dat=yields_obs,effort,cl=cl)
+parameters_new$error<-pbapply(parameters_new,1,getErrorTime,params2,dat=yields_obs,effort,species=species,cl=cl)
+
+return(parameters_new)
 
 stopCluster(cl)
+}
+parameters_new<-sample_params2(vary=c(0.9,0.9),species="Cod")
 #save error
-saveRDS(parameters_new,"lhs_paramspace.RDS")
+#saveRDS(parameters_new,"lhs_paramspace.RDS")
+
 ```
 
 Find param set with the lowest error.
@@ -542,15 +554,30 @@ Plug it back into the model and compare the error values.
 
 ```{r,code_folding=TRUE,eval=F}
 params_lhs<-params2
-params_lhs<-setBevertonHolt(params_lhs, reproduction_level = result[1:12])
+params_lhs<-setBevertonHolt(params_lhs, reproduction_level = unlist(result[1:12]))
+
+gear_params(params_lhs)$catchability<-unlist(result[13:24])
+params_lhs<- projectToSteady(params_lhs, effort = effort[1,])
+simt_lhs<- project(params_lhs, effort = effort)
+
+plotYield(simt_lhs) +    facet_wrap(~Species,scales = "free")+
+geom_point(data=filter(yields_obs),aes(x = Year, y = (Yield), colour = Species),size=0.1)
+
+getReproductionLevel(params_lhs)
+
 
 # check error and compare with original error
-(new<-getErrorTime(vary=result[1:12],params=params_lhs,effort,yields_obs,variable = "reproduction_level"))
+(new<-getErrorTime(vary=unlist(result[1:24]),params=params_lhs,effort,yields_obs,variable = "reproduction_level"))
 
 (original<-getErrorTime(getReproductionLevel(params2), params2,effort, yields_obs,variable = "reproduction_level"))
 
+
+
+
 ```
 
+Only marginally better.
+ 
 # Optimisation
 
 We could then pass the error function to *fastOptim()*, which uses
@@ -561,11 +588,11 @@ it contains.
 
 You may want to skip the below step as it could take a while to run.
 
-- Add catchability to estimation....
 - remove/show fastOptim?
 
 ```{r,code_folding=TRUE,eval=F}
-# set up workers
+quickOptim<-function(params=params2) {
+  # set up workers
   noCores <- parallel::detectCores() - 1 # keep some spare core
   cl <- parallel::makeCluster(noCores, setup_timeout = 0.5)
   setDefaultCluster(cl = cl)
@@ -575,14 +602,19 @@ You may want to skip the below step as it could take a while to run.
     library(optimParallel)
   })
 
-vary<-c(as.numeric(getReproductionLevel(params2)),gear_params(params)$catchability)
+vary<-c(as.numeric(getReproductionLevel(params2)),gear_params(params2)$catchability)
 
-optim_result <- optimParallel::optimParallel(par=vary,getErrorTime,params=params_optim, effort =effort,dat = yields_obs, method   ="L-BFGS-B", lower=c(rep(0.01,(dim(params_optim@species_params)[1])*2)), upper= c(rep(0.9,(dim(params_optim@species_params)[1])*2)),                                parallel=list(loginfo=TRUE, forward=TRUE))
+# you can keep track of how long this takes
+library(tictoc)
+tic()
+optim_result <- optimParallel::optimParallel(par=vary,getErrorTime,params=params2, effort =effort,dat = yields_obs, method   ="L-BFGS-B", lower=c(rep(0.01,(dim(params2@species_params)[1])*2)), upper= c(rep(0.999,(dim(params2@species_params)[1])*2)),                                parallel=list(loginfo=TRUE, forward=TRUE))
 
 stopCluster(cl)
-  
-# compare the error to the error obtained in the above chunk
-#(optim_error<-getErrorTime(getReproductionLevel(sim_optim@params), sim_optim@params,effort, yields_obs,variable = "reproduction_level"))
+toc()
+# 3809.443 sec elapsed (using 7 cores on a Mac Book Pro) 
+}
+optim_results2<-quickOptim(simt_optim@params)
+saveRDS(optim_results2,"optim_results2.RDS")
 
 ```
 
@@ -604,6 +636,8 @@ getReproductionLevel(params_optim)
 
 
 plotYieldObservedVsModel(params_optim)
+plotBiomassObservedVsModel(params_optim)
+
 ```
 
 The error hasn't really reduced that much through the parameter space

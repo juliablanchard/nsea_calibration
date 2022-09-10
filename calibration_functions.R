@@ -2,21 +2,32 @@
 ########## Calculate error function for time series calibration 
 ##########------------------------------------------------------
 
-getErrorTime <- function(vary,params,effort,dat,sumsquares=T,variable="reproduction_level") {
+getErrorTime <- function(vary,params,effort,dat,sumsquares=T,variable="reproduction_level",species=NULL) {
+  
+  if (!is.null(species)) {
+    whichspecies<-which(gear_params(params)$species==species)}
+  
+  if (is.null(species)) {
+    whichspecies<-1:length(gear_params(params)$species)}
   
   if (variable=="erepro"){
-  params <- setBevertonHolt(params, erepro = vary[1:dim(species_params(params))[1]])
+  params <- setBevertonHolt(params, erepro = vary[1:length(whichspecies)])
   }
   if (variable=="R_max"){
-    params <- setBevertonHolt(params, R_max = 10^vary[1:dim(species_params(params))[1]])
+    params <- setBevertonHolt(params, R_max = 10^vary[1:length(whichspecies)])
   }
   if (variable=="reproduction_level"){
-    params <- setBevertonHolt(params, reproduction_level = vary[1:dim(species_params(params))[1]])
+    params <- setBevertonHolt(params, reproduction_level = vary[1:length(whichspecies)])
   }
   
-  gear_params(params)$catchability<-vary[(1+dim(species_params(params))[1]):(2*dim(species_params(params))[1])]
+  if(length(whichspecies)>1){
+  gear_params(params)$catchability[whichspecies]<-vary[(length(whichspecies)+1):length(whichspecies)*2]
+  }
+  if(length(whichspecies)==1){
+    gear_params(params)$catchability[whichspecies]<-vary[(length(whichspecies)+1)]
+  }
   
-  params<-projectToSteady(params,effort=effort[1,])
+  params<-projectToSteady(params,effort=1)
   
   #run time-varying effort model though time from the new initial steady state
 
@@ -24,18 +35,18 @@ getErrorTime <- function(vary,params,effort,dat,sumsquares=T,variable="reproduct
 
   #get yield through time from model:
   
-  yield_species<-getYield(simt)
+  yield_species<-getYield(simt)[,species]
   
   yield_frame <- melt(yield_species)
   
   # leave out spin up 
   
-  y<-yield_frame[yield_frame$time >= 1947,]
+  #y<-yield_frame[yield_frame$time >= 1947,]
   
   # disregard zeroes - these were NAs only filled in to run the model   
   
-  obs<-dat$Yield/1e9 
-  pred<-y$value/1e9
+  obs<-dat[dat$Species==species,]$Yield/1e9 
+  pred<-yield_frame$value/1e9
   
   # sum of squared errors, could use  log-scale of predictions and data (could change this or use other error or likelihood options)
   
@@ -56,10 +67,8 @@ getErrorTime <- function(vary,params,effort,dat,sumsquares=T,variable="reproduct
 
 #vary<-c(as.numeric(getReproductionLevel(params2)),gear_params(params)$catchability)
 # ## test it
-#err<-getErrorTime(vary, params = params2, effort=effort,yields_obs)
-# 
-# 
-# err
+#err<-getErrorTime(vary, params = params2, effort=effort,yields_obs,species="Dab")
+#err
 
 ##########------------------------------------------------------
 ########## Plot the outputs of the time series calibration 
