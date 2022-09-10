@@ -54,9 +54,9 @@ getErrorTime <- function(vary,params,effort,dat,sumsquares=T,variable="reproduct
   
 }
 
-vary<-c(as.numeric(getReproductionLevel(params2)),gear_params(params)$catchability)
+#vary<-c(as.numeric(getReproductionLevel(params2)),gear_params(params)$catchability)
 # ## test it
-err<-getErrorTime(vary, params = params2, effort=effort,yields_obs)
+#err<-getErrorTime(vary, params = params2, effort=effort,yields_obs)
 # 
 # 
 # err

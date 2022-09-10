@@ -33,12 +33,11 @@ This blog post will focus on the transition between stage 2 and 3.
 
 # Example we will use
 
-For this example, I will use the North Sea model, but this time
-calibrated using catch data only.
+For this example, I will use the North Sea model, but with a focus on developing a workflow for any mizer model that has catch and effort (or fishing mortality rate) time-series and at least time averaged biomass observations.
 
 Some of the functions we will be using are still in active development
 in the [mizerExperimental](https://sizespectrum.org/mizerExperimental/)
-and mizerHowTo packages. Therefore we will always want to make sure we
+and [mizerHowTo packages](https://sizespectrum.org/mizerExperimental/). Therefore we will always want to make sure we
 are loading the latest version of the package with
 
 ```{r,echo=FALSE}
@@ -47,8 +46,6 @@ remotes::install_github("sizespectrum/mizerMR")
 library(mizerExperimental)
 library(mizerMR)
 library(tidyverse)
-
-
 #library(mizerHowTo)
 
 library(parallel)
