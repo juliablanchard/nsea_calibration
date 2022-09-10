@@ -5,14 +5,16 @@
 getErrorTime <- function(vary,params,effort,dat,sumsquares=T,variable="reproduction_level") {
   
   if (variable=="erepro"){
-  params <- setBevertonHolt(params, erepro = vary)
+  params <- setBevertonHolt(params, erepro = vary[1:dim(species_params(params))[1]])
   }
   if (variable=="R_max"){
-    params <- setBevertonHolt(params, R_max = 10^vary)
+    params <- setBevertonHolt(params, R_max = 10^vary[1:dim(species_params(params))[1]])
   }
   if (variable=="reproduction_level"){
-    params <- setBevertonHolt(params, reproduction_level = vary)
+    params <- setBevertonHolt(params, reproduction_level = vary[1:dim(species_params(params))[1]])
   }
+  
+  gear_params(params)$catchability<-vary[(1+dim(species_params(params))[1]):(2*dim(species_params(params))[1])]
   
   params<-projectToSteady(params,effort=effort[1,])
   
@@ -20,18 +22,9 @@ getErrorTime <- function(vary,params,effort,dat,sumsquares=T,variable="reproduct
 
   simt <- project(params, effort = effort)
 
-  # get biomass through time
-  
-  biomass <- sweep(simt@n, 3, simt@params@w * simt@params@dw, "*")
-  
   #get yield through time from model:
   
-  f_gear<-getFMortGear(params,effort)
-  yield_species_gear <- apply(sweep(f_gear, c(1, 3, 4), biomass, "*"),
-                              c(1, 2, 3), sum)
-  yield_species_gear
-  
-  yield_species <-apply(yield_species_gear, c(1, 3), sum)
+  yield_species<-getYield(simt)
   
   yield_frame <- melt(yield_species)
   
@@ -61,9 +54,9 @@ getErrorTime <- function(vary,params,effort,dat,sumsquares=T,variable="reproduct
   
 }
 
-#vary<-rep(0.3,12)
+vary<-c(as.numeric(getReproductionLevel(params2)),gear_params(params)$catchability)
 # ## test it
-#err<-getErrorTime(vary, params = params2, effort=effort,yields_obs)
+err<-getErrorTime(vary, params = params2, effort=effort,yields_obs)
 # 
 # 
 # err
